@@ -1,0 +1,260 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-02T00:00:00.000Z",
+  "title": "Design System: mongle (The Editorial Dex)",
+  "extensions": {
+    "colorMeta": {
+      "blue": {
+        "role": "primary",
+        "displayName": "Point Blue",
+        "canonical": "#5670B0",
+        "tonalRamp": [
+          "#142338",
+          "#264269",
+          "#365e96",
+          "#4b7bbf",
+          "#789ccf",
+          "#a5bddf",
+          "#cad9ec",
+          "#ecf1f8"
+        ]
+      },
+      "sky": {
+        "role": "primary",
+        "displayName": "Weather Sky Blue",
+        "canonical": "#2F6FE0",
+        "tonalRamp": [
+          "#0d2444",
+          "#184477",
+          "#2261aa",
+          "#337ed6",
+          "#669ee0",
+          "#99bfeb",
+          "#c3d9f3",
+          "#eaf2fb"
+        ]
+      },
+      "rare": {
+        "role": "secondary",
+        "displayName": "Rare Violet",
+        "canonical": "#7558B0",
+        "tonalRamp": [
+          "#221934",
+          "#3f2e61",
+          "#5a428a",
+          "#7659b0",
+          "#9882c4",
+          "#baacd8",
+          "#d7cfe8",
+          "#f1eef7"
+        ]
+      },
+      "legendary": {
+        "role": "secondary",
+        "displayName": "Legendary Gold",
+        "canonical": "#805E1D",
+        "tonalRamp": [
+          "#3e2e0e",
+          "#74551a",
+          "#a67a26",
+          "#d29d37",
+          "#ddb569",
+          "#e8ce9b",
+          "#f2e2c5",
+          "#faf5ea"
+        ]
+      },
+      "rose": {
+        "role": "tertiary",
+        "displayName": "Rose",
+        "canonical": "#C06F92",
+        "tonalRamp": [
+          "#351724",
+          "#632b44",
+          "#8e3e61",
+          "#b4557e",
+          "#c77f9e",
+          "#daaabf",
+          "#e9cdd9",
+          "#f7edf2"
+        ]
+      },
+      "green": {
+        "role": "tertiary",
+        "displayName": "Green",
+        "canonical": "#5E9E74",
+        "tonalRamp": [
+          "#1d3023",
+          "#355a42",
+          "#4c805e",
+          "#66a47b",
+          "#8cbb9c",
+          "#b2d1bd",
+          "#d2e4d8",
+          "#eff5f1"
+        ]
+      },
+      "bg": {
+        "role": "neutral",
+        "displayName": "Warm Canvas",
+        "canonical": "#F5F4F1",
+        "tonalRamp": [
+          "#2d2920",
+          "#534d3b",
+          "#776f55",
+          "#998f70",
+          "#b3ab94",
+          "#ccc7b8",
+          "#e1ded5",
+          "#f4f3f0"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#1C1C1E",
+        "tonalRamp": [
+          "#252528",
+          "#45454a",
+          "#62626a",
+          "#808089",
+          "#a0a0a6",
+          "#c0c0c4",
+          "#dadadd",
+          "#f2f2f3"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Top-of-screen tab titles."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Card and stat titles."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Running copy, meta rows."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Badges, chips, timestamps."
+      }
+    },
+    "shadows": [
+      {
+        "name": "soft-neutral",
+        "value": "shadowColor #000, opacity 0.1, radius 16, offset 0/6",
+        "purpose": "Reserved for elements that visually float or lift on interaction; static cards use a 1px border instead."
+      },
+      {
+        "name": "hero-blue",
+        "value": "shadowColor #3E6DAE, opacity 0.25-0.3, radius 16-24, offset 0/6-14",
+        "purpose": "The one gradient hero per surface (home weather card, story card)."
+      }
+    ],
+    "motion": [
+      {
+        "name": "sheen-sweep",
+        "value": "diagonal light sweep, linear easing, ~3.2s loop",
+        "purpose": "Holo-tier card motion signature, unchanged from prior generations."
+      },
+      {
+        "name": "mascot-bob",
+        "value": "translateY 0->-6 ease-in-out, ping-pong, ~1.6-1.7s half-cycle",
+        "purpose": "Idle mascot animation, now at avatar scale rather than hero scale."
+      }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Solid ink-black pill, the reference's Email/GitHub button language.",
+      "html": "<button class=\"ds-btn-primary\">시작하기</button>",
+      "css": ".ds-btn-primary { background: #1C1C1E; color: #ffffff; font-weight: 700; font-size: 15px; padding: 15px 24px; border: none; border-radius: 999px; transition: opacity 0.15s; } .ds-btn-primary:hover { opacity: 0.9; } .ds-btn-primary:focus-visible { outline: 2px solid #3E6DAE; outline-offset: 2px; } .ds-btn-primary:active { opacity: 0.85; } .ds-btn-primary:disabled { opacity: 0.4; }"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "chip",
+      "refersTo": "segmented-track",
+      "description": "White active pill with soft shadow on a card-alt track — the reference's language-toggle pattern.",
+      "html": "<div class=\"ds-segmented\"><button class=\"ds-segment ds-segment--active\">피드 보기</button><button class=\"ds-segment\">지도 보기</button></div>",
+      "css": ".ds-segmented { display: flex; background: #EAE9E5; border-radius: 11px; padding: 3px; } .ds-segment { flex: 1; border: none; background: transparent; color: #75747A; font-weight: 600; font-size: 12.5px; padding: 8px 0; border-radius: 9px; cursor: pointer; } .ds-segment--active { background: #ffffff; color: #1C1C1E; box-shadow: 0 1px 5px rgba(0,0,0,0.1); } .ds-segment:focus-visible { outline: 2px solid #3E6DAE; outline-offset: 2px; }"
+    },
+    {
+      "name": "Dex Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "1.5px finish-tier outline; rarity shown as a swatch dot beside neutral-gray type, not colored text.",
+      "html": "<div class=\"ds-dex-card\"><div class=\"ds-dex-card__art\">☁️<span class=\"ds-dex-card__obs\">×24</span></div><div class=\"ds-dex-card__body\"><div class=\"ds-dex-card__name\">뭉게구름</div><div class=\"ds-dex-card__meta\"><span class=\"ds-dex-card__dot\"></span><span>적운</span><span class=\"ds-dex-card__stars\">★☆☆</span></div></div></div>",
+      "css": ".ds-dex-card { width: 160px; background: #ffffff; border-radius: 14px; overflow: hidden; border: 1.5px solid #7558B0; } .ds-dex-card__art { position: relative; height: 88px; display: flex; align-items: center; justify-content: center; font-size: 30px; opacity: 0.7; background: #DCE8F7; } .ds-dex-card__obs { position: absolute; top: 7px; right: 7px; background: rgba(255,255,255,0.9); border-radius: 6px; padding: 2px 6px; font-size: 9px; font-weight: 700; color: #1C1C1E; } .ds-dex-card__body { padding: 10px; } .ds-dex-card__name { font-size: 12.5px; font-weight: 700; color: #1C1C1E; } .ds-dex-card__meta { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; font-size: 10px; color: #8B897F; } .ds-dex-card__dot { width: 6px; height: 6px; border-radius: 3px; background: #7558B0; margin-right: 4px; display: inline-block; }"
+    },
+    {
+      "name": "Tab Bar",
+      "kind": "nav",
+      "refersTo": "card",
+      "description": "Frosted glass bar with an active-tab background pill and a solitary blue camera FAB — lifted directly from the reference's mobile nav.",
+      "html": "<nav class=\"ds-tabbar\"><button class=\"ds-tab ds-tab--active\">🏠<span>홈</span></button><button class=\"ds-tab\">📖<span>도감</span></button><button class=\"ds-fab\">📷</button><button class=\"ds-tab\">🖼️<span>피드</span></button><button class=\"ds-tab\">👤<span>나</span></button></nav>",
+      "css": ".ds-tabbar { display: flex; align-items: flex-start; justify-content: space-around; height: 72px; padding-top: 8px; background: rgba(247,246,244,0.92); backdrop-filter: blur(20px); border-top: 1px solid #E1DFDA; } .ds-tab { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 14px; border-radius: 12px; background: none; border: none; font-size: 10px; font-weight: 600; color: #8B897F; } .ds-tab--active { background: rgba(28,28,30,0.055); color: #1C1C1E; } .ds-fab { width: 52px; height: 52px; margin-top: -22px; border-radius: 26px; background: #3E6DAE; color: #fff; font-size: 22px; box-shadow: 0 5px 12px rgba(62,109,174,0.35); }"
+    },
+    {
+      "name": "Story Card",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "The one-gradient-moment shareable poster, reused at three scales; rarity tag is now a solid swatch pill.",
+      "html": "<div class=\"ds-story-card\"><span class=\"ds-story-card__no\">No.003</span><span class=\"ds-story-card__rarity\">★★★ 희귀</span><div class=\"ds-story-card__center\"><div class=\"ds-story-card__place\">서울 · 한강공원</div><div class=\"ds-story-card__temp\">22°</div><div class=\"ds-story-card__cloud\">양떼구름 · 권적운</div></div><div class=\"ds-story-card__wordmark\">MONGLE 몽글</div></div>",
+      "css": ".ds-story-card { position: relative; width: 100%; max-width: 320px; aspect-ratio: 320/410; border-radius: 22px; overflow: hidden; background: linear-gradient(160deg, #4A7AC0, #3E6DAE); box-shadow: 0 14px 28px rgba(62,109,174,0.3); color: #fff; font-weight: 700; } .ds-story-card__no { position: absolute; top: 18px; left: 18px; background: rgba(255,255,255,0.18); border-radius: 6px; padding: 3px 8px; font-size: 11px; } .ds-story-card__rarity { position: absolute; top: 18px; right: 18px; background: #7558B0; border-radius: 20px; padding: 5px 11px; font-size: 11px; font-weight: 700; } .ds-story-card__center { position: absolute; top: 70px; left: 0; right: 0; text-align: center; } .ds-story-card__place { font-size: 17px; font-weight: 600; } .ds-story-card__temp { font-size: 68px; font-weight: 700; line-height: 1.1; margin: 4px 0; } .ds-story-card__cloud { font-size: 15px; font-weight: 700; } .ds-story-card__wordmark { position: absolute; bottom: 16px; left: 0; right: 0; text-align: center; font-size: 11px; font-weight: 700; letter-spacing: 2px; opacity: 0.85; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Editorial Dex",
+    "overview": "mongle's second visual generation trades the original's soft pastel-glow-everywhere language for the restraint of a well-made personal site: a warm neutral canvas, one blue point color doing all the interactive work, black pill buttons for primary actions, and small flat color swatches carrying category meaning instead of saturated gradients. It is directly informed by a real reference (github.com/1eehvunzin/personalweb) — its actual visual language and its own mobile-breakpoint patterns (bottom sheet with a grabber handle, active-tab background pill) were adopted directly, since mongle already is the native context those patterns describe.\n\nThe mascot and the collecting mechanic survive as product truth, but the mascot's role shrank from hero-scale to avatar-scale, consistent with the reference's restraint.",
+    "keyCharacteristics": [
+      "Neutral warm-gray canvas, white cards, one blue point accent — restraint over saturation",
+      "Black ink pill buttons for every primary action; blue reserved for links, active states, and the one camera FAB",
+      "Rarity/category meaning carried by small flat swatches/dots beside neutral text, never by colored text",
+      "Soft neutral (never colored) drop shadows, low opacity",
+      "Two-column stat blocks and row/timeline lists borrowed from the reference's information layout",
+      "Exactly one gradient moment per surface"
+    ],
+    "rules": [
+      {
+        "name": "The Core Triad Rule",
+        "body": "Ink black, sky blue, and white are the system's defining combination, confirmed directly by the user. Every screen's dominant surfaces should read as this triad first; rarity/category hues are minor accents on top, never a fourth co-equal color.",
+        "section": "colors"
+      },
+      {
+        "name": "The Swatch, Not Text Rule",
+        "body": "Rarity and category color never colors text directly — it lives in a small solid dot or square beside neutral-colored text.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Gradient Rule",
+        "body": "Each surface gets at most one gradient moment. Everywhere else is flat.",
+        "section": "colors"
+      },
+      {
+        "name": "The Border-Over-Shadow Rule",
+        "body": "A static card gets a 1px border hairline, not a shadow. Shadow is reserved for elements that visually float or lift on interaction.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do treat ink black / sky blue / white as the confirmed core triad for every screen's dominant surfaces.",
+      "Do use blue exclusively for interactive elements.",
+      "Do give every primary action the same black pill button.",
+      "Do default to a 1px border for static cards; reserve shadow for elements that lift.",
+      "Do keep the mascot present but avatar-scale, not hero-scale."
+    ],
+    "donts": [
+      "Don't color body text with a rarity/category hue directly.",
+      "Don't introduce a second gradient moment on a screen that already has one.",
+      "Don't revert to the old hue-tinted glow shadow system."
+    ]
+  }
+}
