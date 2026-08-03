@@ -209,28 +209,12 @@ export default function FeedScreen() {
                     borderColor: glass.border,
                   }}
                 >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: rs(5),
-                    }}
+                  <Text
+                    className="font-bold"
+                    style={{ fontSize: rs(11), color: glass.ink }}
                   >
-                    <View
-                      style={{
-                        width: rs(6),
-                        height: rs(6),
-                        borderRadius: rs(3),
-                        backgroundColor: f.color,
-                      }}
-                    />
-                    <Text
-                      className="font-bold"
-                      style={{ fontSize: rs(11), color: glass.ink }}
-                    >
-                      {f.stars} {f.tier}
-                    </Text>
-                  </View>
+                    {f.stars} {f.tier}
+                  </Text>
                 </Glass>
               </View>
 
