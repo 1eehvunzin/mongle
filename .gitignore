@@ -38,5 +38,13 @@ yarn-error.*
 *.tsbuildinfo
 
 # generated native folders
-/ios
-/android
+frontend/ios
+frontend/android
+
+# Python / FastAPI server
+server/venv/
+server/__pycache__/
+server/.env
+server/uploads/
+server/mongle.db
+*.pyc
