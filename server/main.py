@@ -67,7 +67,9 @@ async def recognize(payload: RecognizeRequest):
         else f"data:image/jpeg;base64,{payload.imageBase64}"
     )
 
-    option_list = ", ".join(f"{c.name} ({c.type})" for c in KNOWN_CLOUDS)
+    option_list = "\n".join(
+        f"- {c.name} ({c.type}): {c.description}" for c in KNOWN_CLOUDS
+    )
 
     client = AsyncOpenAI(api_key=OPENAI_API_KEY)
     try:
@@ -80,16 +82,22 @@ async def recognize(payload: RecognizeRequest):
                     "role": "system",
                     "content": (
                         "너는 하늘 사진을 보고 구름 종류를 식별하는 분류기야. "
-                        f"반드시 다음 목록 중 하나만 골라: {option_list}. "
-                        "애매하면 가장 가까운 걸 골라. "
-                        'JSON으로만 답해: {"name": "목록의 한글 이름", "type": "목록의 괄호 안 한자어", '
+                        "사진에 하늘이나 구름이 찍혀있지 않으면(사람, 실내, 사물, 음식 등) "
+                        "절대 아래 목록에서 고르지 말고 name을 null로 답해. "
+                        "하늘이 찍혔다면 아래 목록 중 실제 구름 모양과 가장 비슷한 것 하나만 골라. "
+                        "특히 하늘 전체를 뒤덮은 밋밋한 회색은 대부분 안개구름(층운)이고, "
+                        "먹구름(적란운)은 탑처럼 솟아오른 두껍고 짙은 소나기구름일 때만 골라 — "
+                        "단순히 날이 흐리다고 먹구름을 고르면 안 돼.\n"
+                        f"목록:\n{option_list}\n"
+                        'JSON으로만 답해: {"name": "목록의 한글 이름 또는 null", '
+                        '"type": "목록의 괄호 안 한자어 또는 null", '
                         '"confidence": 0~1 사이 숫자, "reasoning": "한 문장 이유(한국어)"}.'
                     ),
                 },
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "이 하늘 사진의 구름 종류를 식별해줘."},
+                        {"type": "text", "text": "이 사진의 구름 종류를 식별해줘."},
                         {"type": "image_url", "image_url": {"url": data_url}},
                     ],
                 },
@@ -114,8 +122,13 @@ async def recognize(payload: RecognizeRequest):
         )
 
     match = next(
-        (c for c in KNOWN_CLOUDS if c.name == parsed.get("name")), KNOWN_CLOUDS[0]
+        (c for c in KNOWN_CLOUDS if c.name == parsed.get("name")), None
     )
+    if match is None:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "구름 사진이 아닌 것 같아요. 하늘을 찍어주세요."},
+        )
 
     return {
         "name": match.name,
@@ -238,3 +251,11 @@ async def today_sky(lat: float, lng: float):
         cloud_type=match.type,
         message=parsed.get("message", ""),
     )
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    # 0.0.0.0 so devices on the LAN (phone running Expo Go) can reach this,
+    # not just the machine it's running on.
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

@@ -3,7 +3,7 @@
 // /api/recognize and /api/today-sky are the only things that still need a
 // server (they hold the OpenAI/OpenWeatherMap keys), see lib/api.ts.
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Directory, File, Paths } from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import {
   bestFinish,
   CLOUD_BY_NAME,
@@ -96,19 +96,19 @@ async function toOut(c: StoredCatch): Promise<CatchOut> {
 // Photos are saved into the app's own document directory (survives
 // restarts, unlike the cache dir the camera itself writes the shot to) so a
 // catch's photo doesn't disappear once the OS reclaims cache space.
-function photosDir(): Directory {
-  const dir = new Directory(Paths.document, "catches");
-  if (!dir.exists) dir.create({ intermediates: true });
+async function photosDir(): Promise<string> {
+  const dir = `${FileSystem.documentDirectory}catches/`;
+  const info = await FileSystem.getInfoAsync(dir);
+  if (!info.exists) await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
   return dir;
 }
 
-function savePhotoBase64(base64: string): string {
-  const file = new File(
-    photosDir(),
-    `${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`,
-  );
-  file.write(base64, { encoding: "base64" });
-  return file.uri;
+async function savePhotoBase64(base64: string): Promise<string> {
+  const uri = `${await photosDir()}${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`;
+  await FileSystem.writeAsStringAsync(uri, base64, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  return uri;
 }
 
 export type CreateCatchInput = {
@@ -138,7 +138,7 @@ export async function createCatch(input: CreateCatchInput): Promise<CatchOut> {
     lng: input.lng ?? null,
     tempC: input.temp_c ?? null,
     weatherCondition: input.weather_condition ?? null,
-    photoUri: input.photo_base64 ? savePhotoBase64(input.photo_base64) : null,
+    photoUri: input.photo_base64 ? await savePhotoBase64(input.photo_base64) : null,
     capturedAt: new Date().toISOString(),
   };
   catches.push(stored);

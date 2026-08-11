@@ -153,7 +153,8 @@ export default function CaptureScreen() {
       });
       router.back();
       router.push({ pathname: "/share", params: { catchId: String(saved.id) } });
-    } catch {
+    } catch (e) {
+      console.error("createCatch failed", e);
       setRecognizeError("기록 저장에 실패했어요");
     } finally {
       setRegistering(false);

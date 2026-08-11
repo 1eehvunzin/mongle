@@ -16,6 +16,7 @@ export default function RootLayout() {
     "Pretendard-SemiBold": require("../assets/fonts/Pretendard-SemiBold.otf"),
     "Pretendard-Bold": require("../assets/fonts/Pretendard-Bold.otf"),
     "Pretendard-ExtraBold": require("../assets/fonts/Pretendard-ExtraBold.otf"),
+    Cloudsofa: require("../assets/fonts/Cloudsofa_namgim-Regular.ttf"),
   });
 
   // One-time device-identity bootstrap: upserts the anonymous device_id with

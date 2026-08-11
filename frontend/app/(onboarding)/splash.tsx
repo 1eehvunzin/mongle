@@ -28,17 +28,16 @@ export default function SplashScreen() {
         >
           <MongleMascot size={40} />
           <Text
-            className="font-bold"
-            style={{ fontSize: rs(30), color: glass.ink, letterSpacing: -0.5 }}
+            style={{
+              fontSize: rs(32),
+              color: "#4FA8D8",
+              letterSpacing: -0.5,
+              fontFamily: "Cloudsofa",
+            }}
           >
             mongle
           </Text>
         </View>
-        <Text
-          style={{ fontSize: rs(12), color: glass.subMuted, marginTop: rs(8) }}
-        >
-          구름 도감
-        </Text>
       </View>
 
       <Text
@@ -51,7 +50,7 @@ export default function SplashScreen() {
           opacity: 0.7,
         }}
       >
-        MONGLE
+        Copyright ⓒ mongle
       </Text>
     </Pressable>
   );
