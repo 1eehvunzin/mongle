@@ -23,10 +23,10 @@ import { CatchOut, getFeed } from "../../lib/localStore";
 // Fallback art for catches saved without a photo — keyed loosely by species
 // so the card still reads as "that kind of cloud" instead of a blank tile.
 const FALLBACK_PHOTOS: Record<string, number> = {
-  뭉게구름: require("../../assets/ref/구름 (3).jpg"),
-  양떼구름: require("../../assets/ref/구름 (2).jpg"),
+  뭉게구름: require("../../assets/ref/cloud-3.jpg"),
+  양떼구름: require("../../assets/ref/cloud-2.jpg"),
 };
-const DEFAULT_FALLBACK_PHOTO = require("../../assets/ref/구름 (1).jpg");
+const DEFAULT_FALLBACK_PHOTO = require("../../assets/ref/cloud-1.jpg");
 
 function conditionMeta(cond: string | null): {
   icon: keyof typeof Ionicons.glyphMap;

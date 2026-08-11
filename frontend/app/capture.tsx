@@ -9,7 +9,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Location from "expo-location";
@@ -30,6 +30,7 @@ type Recognized = {
 };
 
 export default function CaptureScreen() {
+  const { mock } = useLocalSearchParams<{ mock?: string }>();
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const [cameraReady, setCameraReady] = useState(false);
@@ -74,6 +75,21 @@ export default function CaptureScreen() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (mock !== "1") return;
+    setPhotoUri("mock");
+    setPlaceName("남산");
+    setTodaySky({
+      temp_c: 24,
+      condition: "맑음",
+      cloud_name: "뭉게구름",
+      cloud_type: "적운",
+      message: "",
+    });
+    setRecognized({ name: "뭉게구름", type: "적운", confidence: 0.9 });
+    setPhase("result");
+  }, [mock]);
 
   // The photo itself is what's sent off for recognition, so this is the
   // gate: called right after a shutter press, and again on every retry if
@@ -228,7 +244,13 @@ export default function CaptureScreen() {
           )
         ) : (
           <Image
-            source={photoUri ? { uri: photoUri } : undefined}
+            source={
+              photoUri === "mock"
+                ? require("../assets/ref/cloud (1).jpg")
+                : photoUri
+                  ? { uri: photoUri }
+                  : undefined
+            }
             style={{ flex: 1 }}
             resizeMode="cover"
           />
