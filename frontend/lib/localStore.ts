@@ -107,7 +107,12 @@ async function photosDir(): Promise<string> {
 async function savePhotoBase64(base64: string): Promise<string> {
   // expo-file-system has no document directory on web — there's no disk to
   // write to — so the photo is kept as a data URI instead of a file:// path.
-  if (Platform.OS === "web") return `data:image/jpeg;base64,${base64}`;
+  // expo-camera's web takePictureAsync already returns a full data URI in
+  // its base64 field (unlike native, which returns the raw payload), so
+  // only wrap it if it isn't one already.
+  if (Platform.OS === "web") {
+    return base64.startsWith("data:") ? base64 : `data:image/jpeg;base64,${base64}`;
+  }
 
   const uri = `${await photosDir()}${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`;
   await FileSystem.writeAsStringAsync(uri, base64, {

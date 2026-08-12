@@ -26,6 +26,8 @@ jobs:
       - run: npm ci
 
       - run: npx expo export -p web
+        env:
+          EXPO_PUBLIC_API_URL: https://mongle-ruby.vercel.app
 
       - run: npx eas deploy --prod --non-interactive
         env:
