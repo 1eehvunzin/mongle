@@ -2,6 +2,7 @@
 // AsyncStorage holds the JSON records; expo-file-system holds the photos.
 // /api/recognize and /api/today-sky are the only things that still need a
 // server (they hold the OpenAI/OpenWeatherMap keys), see lib/api.ts.
+import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system/legacy";
 import {
@@ -104,6 +105,10 @@ async function photosDir(): Promise<string> {
 }
 
 async function savePhotoBase64(base64: string): Promise<string> {
+  // expo-file-system has no document directory on web — there's no disk to
+  // write to — so the photo is kept as a data URI instead of a file:// path.
+  if (Platform.OS === "web") return `data:image/jpeg;base64,${base64}`;
+
   const uri = `${await photosDir()}${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`;
   await FileSystem.writeAsStringAsync(uri, base64, {
     encoding: FileSystem.EncodingType.Base64,

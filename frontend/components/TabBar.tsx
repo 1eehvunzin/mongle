@@ -69,7 +69,7 @@ export default function TabBar() {
     <View
       style={{
         pointerEvents: "box-none" as any,
-        position: Platform.OS === "web" ? ("fixed" as any) : "absolute",
+        position: "absolute",
         left: rs(16),
         right: rs(16),
         bottom: Platform.OS === "web" ? rs(12) : insets.bottom + rs(12),
