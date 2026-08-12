@@ -44,10 +44,7 @@ function formatCapturedAt(iso: string): string {
 export default function ShareScreen() {
   const insets = useSafeAreaInsets();
   const { width: screenW, height: screenH } = useWindowDimensions();
-  const { catchId, mock } = useLocalSearchParams<{
-    catchId?: string;
-    mock?: string;
-  }>();
+  const { catchId } = useLocalSearchParams<{ catchId?: string }>();
 
   const [item, setItem] = useState<CatchOut | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -63,32 +60,11 @@ export default function ShareScreen() {
   const cardRef = useRef<View>(null);
 
   useEffect(() => {
-    if (mock === "1") {
-      setItem({
-        id: 999,
-        dex_no: "No.014",
-        cloud_name: "뭉게구름",
-        cloud_type: "적운",
-        rarity_label: "레어",
-        stars: "★★☆",
-        finish: "gold",
-        memo: "오늘 하늘 미쳤다 ☁️",
-        place_name: "여의도 한강공원",
-        lat: 37.5285,
-        lng: 126.9327,
-        temp_c: 26,
-        weather_condition: "맑음",
-        photo_url: null,
-        captured_at: new Date().toISOString(),
-        handle: "구름지기",
-      });
-      return;
-    }
     if (!catchId) return;
     getCatch(catchId)
       .then(setItem)
       .catch(() => setLoadError(true));
-  }, [catchId, mock]);
+  }, [catchId]);
 
   const bubbleText = item?.memo?.trim() ? item.memo.trim() : "오늘 하늘 미쳤다 ☁️";
   const photoUrl = item?.photo_url ?? null;
