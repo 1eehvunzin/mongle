@@ -6,8 +6,5 @@ html,
 body,
 #root {
   height: 100%;
-}
-
-body {
-  overflow-y: auto !important;
+  overflow: hidden;
 }
