@@ -8,8 +8,9 @@ import { rs } from "../constants/scale";
 // Reachable both as an in-app screen (pushed from login-onboarding.tsx /
 // profile.tsx) and, once `npx expo export -p web` deploys, as a public URL
 // at mongle.expo.app/privacy — the same one App Store Connect's "Privacy
-// Policy URL" field points at, so this needs to read fine standalone too
-// (no back button when there's nothing to go back to).
+// Policy URL" field points at, so the back button always needs somewhere
+// to go even when there's no push history to pop (a cold visit to the
+// standalone URL) — falls back to home instead of hiding itself.
 const CONTACT_EMAIL = "monglegroom@gmail.com";
 const EFFECTIVE_DATE = "2026년 8월 17일";
 
@@ -64,35 +65,38 @@ const SECTIONS: { title: string; body: string }[] = [
   },
 ];
 
-export default function PrivacyScreen() {
-  const canGoBack = router.canGoBack();
+// Same treatment as share.tsx's back chevron (size, padding-based hit
+// area) — the only other back button in the app, so this is what "back
+// button" means here rather than inventing a second style for it.
+function goBack() {
+  if (router.canGoBack()) router.back();
+  else router.replace("/");
+}
 
+export default function PrivacyScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: glass.bg }} edges={["top"]}>
       <View
         style={{
           flexDirection: "row",
           alignItems: "center",
-          gap: rs(10),
           paddingHorizontal: rs(16),
           paddingTop: rs(4),
-          paddingBottom: rs(10),
+          paddingBottom: rs(6),
         }}
       >
-        {canGoBack ? (
-          <Pressable onPress={() => router.back()} hitSlop={12}>
-            <Ionicons name="chevron-back" size={rs(22)} color={glass.ink} />
-          </Pressable>
-        ) : null}
+        <Pressable onPress={goBack} style={{ padding: rs(10), marginLeft: -rs(10) }}>
+          <Ionicons name="chevron-back" size={rs(24)} color={glass.ink} />
+        </Pressable>
         <Text className="font-bold" style={{ fontSize: rs(19), color: glass.ink, letterSpacing: -0.3 }}>
           개인정보 처리방침
         </Text>
       </View>
 
       <ScrollView
-        style={Platform.OS === "web" ? ({ overflow: "auto" } as any) : undefined}
+        style={[{ flex: 1, minHeight: 0 }, Platform.OS === "web" ? ({ overflow: "auto" } as any) : null]}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: rs(20), paddingBottom: rs(60) }}
+        contentContainerStyle={{ paddingHorizontal: rs(16), paddingBottom: rs(60) }}
       >
         <Text style={{ fontSize: rs(12.5), color: glass.sub, lineHeight: rs(19) }}>
           몽글(이하 "서비스")은 이용자의 개인정보를 소중히 다루며, 「개인정보보호법」 등 관련 법령을 준수하기 위해 다음과 같이 개인정보 처리방침을 안내해요.
