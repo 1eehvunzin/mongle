@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  GestureResponderEvent,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -45,6 +46,42 @@ export default function CaptureScreen() {
   );
   const [todaySky, setTodaySky] = useState<TodaySkyOut | null>(null);
   const [registering, setRegistering] = useState(false);
+
+  // Pinch-to-zoom — plain touch-event math instead of react-native-gesture-
+  // handler: that package needs native linking, and this device can't
+  // rebuild the dev client right now (see the Apple security-delay
+  // conversation), so anything requiring a rebuild is off the table until
+  // that clears. onTouchStart/Move/End are core RN, work in Expo Go as-is,
+  // and react-native-web forwards real browser touch events through the
+  // same handlers, so this covers app and web with one implementation.
+  const [zoom, setZoom] = useState(0);
+  const pinchRef = useRef<{ distance: number; zoom: number } | null>(null);
+
+  const touchDistance = (touches: GestureResponderEvent["nativeEvent"]["touches"]) => {
+    const [a, b] = touches;
+    return Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
+  };
+
+  const onCameraTouchStart = (e: GestureResponderEvent) => {
+    const touches = e.nativeEvent.touches;
+    if (touches.length === 2) {
+      pinchRef.current = { distance: touchDistance(touches), zoom };
+    }
+  };
+
+  const onCameraTouchMove = (e: GestureResponderEvent) => {
+    const touches = e.nativeEvent.touches;
+    if (touches.length !== 2 || !pinchRef.current) return;
+    const distance = touchDistance(touches);
+    // Pinching the finger-distance out to ~2.4x the starting spread reaches
+    // full zoom — tuned by feel, not a platform constant.
+    const delta = (distance / pinchRef.current.distance - 1) / 1.4;
+    setZoom(Math.min(1, Math.max(0, pinchRef.current.zoom + delta)));
+  };
+
+  const onCameraTouchEnd = (e: GestureResponderEvent) => {
+    if (e.nativeEvent.touches.length < 2) pinchRef.current = null;
+  };
 
   // Real device location for the "기록" chip and (once registered) the
   // catch's map pin — best-effort: a denied permission or a platform without
@@ -154,6 +191,7 @@ export default function CaptureScreen() {
     setRecognized(null);
     setRecognizeError(null);
     setPhase("camera");
+    setZoom(0);
   };
 
   const register = async () => {
@@ -210,7 +248,11 @@ export default function CaptureScreen() {
               ref={cameraRef}
               style={{ flex: 1 }}
               facing="back"
+              zoom={zoom}
               onCameraReady={() => setCameraReady(true)}
+              onTouchStart={onCameraTouchStart}
+              onTouchMove={onCameraTouchMove}
+              onTouchEnd={onCameraTouchEnd}
             />
           ) : (
             <View
