@@ -79,6 +79,28 @@ export default function LoginOnboardingScreen() {
             <AuthButtons onSignedIn={finish} />
           </View>
 
+          {/* Apple/Kakao sign-in both hand over an account identifier (and
+              sometimes email) — surface the policy link right where that
+              happens, not buried only in profile.tsx's settings list. */}
+          <Text
+            style={{
+              fontSize: rs(10.5),
+              color: glass.subMuted,
+              textAlign: "center",
+              marginTop: rs(10),
+              lineHeight: rs(15),
+            }}
+          >
+            로그인하면{" "}
+            <Text
+              onPress={() => router.push("/privacy")}
+              style={{ textDecorationLine: "underline", fontWeight: "600" }}
+            >
+              개인정보 처리방침
+            </Text>
+            에 동의하는 것으로 간주돼요
+          </Text>
+
           <Pressable onPress={dismiss} style={{ paddingVertical: rs(14), alignItems: "center" }}>
             <Text
               style={{
