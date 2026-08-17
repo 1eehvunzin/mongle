@@ -9,23 +9,33 @@ type Props = {
   shadow?: boolean;
 };
 
-// No photoreal iPad asset on hand (only the iPhone Bezel.png), so this draws
-// a clean flat aluminum-style iPad silhouette in CSS: thin uniform bezel,
-// rounded body, single top-center camera dot — reads as "tablet" without
-// needing a bitmap. Percentages mirror PhoneFrame's cutout convention.
-const SCREEN_LEFT_PCT = 2.6;
-const SCREEN_TOP_PCT = 2.0;
-const SCREEN_W_PCT = 94.8;
-const SCREEN_H_PCT = 96.0;
+// Three concentric layers, closest to how a real iPad reads from the front:
+// a thin sliver of aluminum at the very edge, a black glass bezel — the
+// dominant border color on any real iPad, not the aluminum — and the
+// display itself, corners rounded slightly less than the body (concentric,
+// not near-square). The first pass skipped the black bezel layer entirely
+// and went straight from aluminum to the (white) screen content, so it
+// read as a rounded white card, not a tablet.
+const BODY_RADIUS_PCT = 5.4;
+const ALU_INSET_PCT = 0.7;
+const SCREEN_INSET_PCT = 2.5;
+
+const pct = (base: number, p: number) => (base * p) / 100;
 
 export function getIpadScreenSize(width: number, height: number) {
-  return { width: Math.round((width * SCREEN_W_PCT) / 100), height: Math.round((height * SCREEN_H_PCT) / 100) };
+  return {
+    width: Math.round(width - 2 * pct(width, SCREEN_INSET_PCT)),
+    height: Math.round(height - 2 * pct(height, SCREEN_INSET_PCT)),
+  };
 }
 
 export default function IpadFrame({ width, height, rotateDeg = 0, children, style, shadow = true }: Props) {
-  const radius = Math.round(width * 0.045);
-  const screenRadius = Math.round(radius * 0.6);
-  const dot = Math.max(6, Math.round(width * 0.006));
+  const bodyRadius = Math.round(pct(width, BODY_RADIUS_PCT));
+  const bezelRadius = Math.max(2, Math.round(bodyRadius - pct(width, ALU_INSET_PCT)));
+  const screenRadius = Math.max(2, Math.round(bodyRadius - pct(width, SCREEN_INSET_PCT)));
+  const dot = Math.max(5, Math.round(width * 0.0045));
+  const dotTop = ALU_INSET_PCT + (SCREEN_INSET_PCT - ALU_INSET_PCT) / 2;
+
   return (
     <div
       style={{
@@ -37,22 +47,36 @@ export default function IpadFrame({ width, height, rotateDeg = 0, children, styl
         ...style,
       }}
     >
+      {/* aluminum chassis */}
       <div
         style={{
           position: "absolute",
           inset: 0,
-          borderRadius: radius,
-          background: "linear-gradient(155deg, #EEF0F2 0%, #D2D5D9 55%, #B9BDC3 100%)",
-          boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.7)",
+          borderRadius: bodyRadius,
+          background: "linear-gradient(155deg, #E4E6E9 0%, #C7CACF 45%, #AEB2B8 100%)",
+          boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.5), inset 0 1px 2px rgba(255,255,255,0.6)",
         }}
       />
+      {/* black glass bezel */}
       <div
         style={{
           position: "absolute",
-          left: `${SCREEN_LEFT_PCT}%`,
-          top: `${SCREEN_TOP_PCT}%`,
-          width: `${SCREEN_W_PCT}%`,
-          height: `${SCREEN_H_PCT}%`,
+          left: `${ALU_INSET_PCT}%`,
+          top: `${ALU_INSET_PCT}%`,
+          right: `${ALU_INSET_PCT}%`,
+          bottom: `${ALU_INSET_PCT}%`,
+          borderRadius: bezelRadius,
+          background: "linear-gradient(155deg, #1c1d1f 0%, #050506 40%, #000000 100%)",
+        }}
+      />
+      {/* screen */}
+      <div
+        style={{
+          position: "absolute",
+          left: `${SCREEN_INSET_PCT}%`,
+          top: `${SCREEN_INSET_PCT}%`,
+          right: `${SCREEN_INSET_PCT}%`,
+          bottom: `${SCREEN_INSET_PCT}%`,
           borderRadius: screenRadius,
           overflow: "hidden",
           background: "#000",
@@ -60,16 +84,19 @@ export default function IpadFrame({ width, height, rotateDeg = 0, children, styl
       >
         {children}
       </div>
+      {/* front camera, sitting in the black bezel strip above the screen */}
       <div
         style={{
           position: "absolute",
-          top: Math.round(height * 0.009),
+          top: `${dotTop}%`,
           left: "50%",
           width: dot,
           height: dot,
           marginLeft: -dot / 2,
+          marginTop: -dot / 2,
           borderRadius: "50%",
-          background: "#4B4F55",
+          background: "radial-gradient(circle at 35% 35%, #3a3d42, #050506 70%)",
+          boxShadow: "0 0 0 1px rgba(255,255,255,0.08)",
         }}
       />
     </div>
