@@ -101,7 +101,12 @@ export default function CaptureScreen() {
           return;
         }
 
-        const pos = await Location.getCurrentPositionAsync({});
+        // Only ever used for the "기록" chip, the weather lookup, and the
+        // catch's map pin — city-block accuracy is plenty, no reason to ask
+        // for GPS precision the feature doesn't need.
+        const pos = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
         if (cancelled) return;
         setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         getTodaySky(pos.coords.latitude, pos.coords.longitude)

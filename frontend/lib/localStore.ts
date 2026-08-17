@@ -497,21 +497,3 @@ export async function migrateLocalDataToServer(token: string): Promise<void> {
 
   await AsyncStorage.setItem(MIGRATED_KEY, "1");
 }
-
-// Dev-only escape hatch (see profile.tsx's __DEV__-gated settings row) —
-// wipes every AsyncStorage key this file owns (nickname, consent, catches,
-// the onboarding/migration flags) so a device that already has local state
-// can re-trigger first-launch flows like login-onboarding.tsx without
-// uninstalling the app. Does NOT touch the server account itself — sign out
-// separately if the point is testing a clean signed-out state too.
-export async function resetAllLocalData(): Promise<void> {
-  await AsyncStorage.multiRemove([
-    CATCHES_KEY,
-    NICKNAME_KEY,
-    CONSENT_KEY,
-    FIRST_LAUNCH_KEY,
-    NEXT_ID_KEY,
-    LOGIN_ONBOARDING_SEEN_KEY,
-    MIGRATED_KEY,
-  ]);
-}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -95,70 +95,86 @@ export default function HomeScreen() {
   const [weatherStatus, setWeatherStatus] = useState<"loading" | "error" | "loaded">("loading");
   const spin = useSharedValue(0);
 
+  // fetchLocation below is called both on mount and from the refresh
+  // button, so it can't rely on a per-effect `cancelled` closure the way a
+  // one-shot mount effect would — this guards every state update against
+  // firing after the screen's already unmounted instead.
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   const condition: ConditionKey | null = todaySky?.condition ?? null;
   const sky = condition ? SKY_GLASS[condition] : SKY_NEUTRAL;
   const conditionIcon = condition ? CONDITION_ICONS[condition] : "cloud-outline";
 
   // Real device location for the weather card's place chip and the
   // today-sky lookup. A denied permission or failed lookup used to leave
-  // `coords` null forever with no visible error — loadWeather() would just
-  // silently no-op on every subsequent call, so the card was permanently
-  // stuck showing the "맑음" fallback. Now every failure path here also
-  // marks weatherStatus "error" so the card actually says so.
-  useEffect(() => {
-    let cancelled = false;
+  // `coords` null forever with no visible error, AND with no way to
+  // retry — the refresh button only ever re-ran loadWeather(), which
+  // early-returns without coords, so once this timed out the card was
+  // stuck until a full page reload. fetchLocation is now callable again
+  // from the refresh button too (see refreshWeather below).
+  const fetchLocation = useCallback(async () => {
+    let timedOut = false;
     const timeoutId = setTimeout(() => {
-      if (!cancelled && !coords) {
-        console.warn("[home/weather] location fetch timed out after 7s — no coords yet");
-        setPlaceName((prev) => prev ?? "위치 미확인");
-        setWeatherStatus("error");
-      }
-    }, 7000);
-    (async () => {
-      try {
-        const perm = await Location.requestForegroundPermissionsAsync();
-        if (!perm.granted) {
-          console.warn("[home/weather] location permission not granted:", perm.status);
-          if (!cancelled) {
-            setPlaceName("위치 권한 필요");
-            setWeatherStatus("error");
-          }
-          return;
-        }
+      if (!isMountedRef.current) return;
+      timedOut = true;
+      console.warn("[home/weather] location fetch timed out after 12s — no coords yet");
+      setPlaceName((prev) => prev ?? "위치 미확인");
+      setWeatherStatus("error");
+    }, 12000);
 
-        const pos = await Location.getCurrentPositionAsync({});
-        if (cancelled) return;
-        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-
-        try {
-          const [place] = await Location.reverseGeocodeAsync({
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-          });
-          if (!cancelled) {
-            setPlaceName(
-              place?.name ?? place?.district ?? place?.city ?? "현재 위치",
-            );
-          }
-        } catch (e) {
-          // reverseGeocodeAsync isn't available on web in many browsers —
-          // logged as info, not a warning, since this is expected there.
-          console.info("[home/weather] reverseGeocodeAsync failed (expected on web):", e);
-          if (!cancelled) setPlaceName("현재 위치");
-        }
-      } catch (e) {
-        console.warn("[home/weather] location fetch failed:", e);
-        if (!cancelled) {
-          setPlaceName("위치 미확인");
+    try {
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (!perm.granted) {
+        console.warn("[home/weather] location permission not granted:", perm.status);
+        clearTimeout(timeoutId);
+        if (isMountedRef.current) {
+          setPlaceName("위치 권한 필요");
           setWeatherStatus("error");
         }
+        return;
       }
-    })();
-    return () => {
-      cancelled = true;
+
+      // Only ever used for a district-level place chip and weather
+      // lookup — city-block accuracy is plenty, no reason to ask for GPS
+      // precision the feature doesn't need (and it resolves faster).
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
       clearTimeout(timeoutId);
-    };
+      if (timedOut || !isMountedRef.current) return; // already reported as an error above
+      setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+
+      try {
+        const [place] = await Location.reverseGeocodeAsync({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+        });
+        if (isMountedRef.current) {
+          setPlaceName(place?.name ?? place?.district ?? place?.city ?? "현재 위치");
+        }
+      } catch (e) {
+        // reverseGeocodeAsync isn't available on web in many browsers —
+        // logged as info, not a warning, since this is expected there.
+        console.info("[home/weather] reverseGeocodeAsync failed (expected on web):", e);
+        if (isMountedRef.current) setPlaceName("현재 위치");
+      }
+    } catch (e) {
+      clearTimeout(timeoutId);
+      if (timedOut || !isMountedRef.current) return;
+      console.warn("[home/weather] location fetch failed:", e);
+      setPlaceName("위치 미확인");
+      setWeatherStatus("error");
+    }
   }, []);
+
+  useEffect(() => {
+    fetchLocation();
+  }, [fetchLocation]);
 
   const loadWeather = useCallback(async () => {
     if (!coords) return;
@@ -203,8 +219,10 @@ export default function HomeScreen() {
     setHomeRefreshing(true);
     // Pull-to-refresh used to only reload the level/streak stats — the
     // weather card had no way to recover from an error short of the tiny
-    // spin button inside it.
-    await Promise.all([loadHome(), loadWeather()]);
+    // spin button inside it. Same coords-missing gap as the spin button:
+    // retry location itself rather than calling loadWeather(), which
+    // silently no-ops without coords.
+    await Promise.all([loadHome(), coords ? loadWeather() : fetchLocation()]);
     setHomeRefreshing(false);
   };
 
@@ -213,50 +231,42 @@ export default function HomeScreen() {
   const streakCurrent = home?.streak_current ?? 0;
   const recentCatches = home?.recent_catches ?? [];
 
-  // First launch of the session: ask for a nickname as a modal over the
-  // home screen itself, rather than a standalone page before it. Waits on
-  // ensureSession() (shared with the root layout's own call — see
-  // lib/session.ts) instead of reading onboardingState.nicknameSet
-  // synchronously on mount: that flag is only set *after* the session
-  // fetch resolves, so checking it immediately raced the network and made
-  // this modal cover the whole screen (tab bar included, blocking the
-  // camera button) on every cold load, even for a returning user who'd
-  // already set a nickname.
+  // First launch: login gets first say, nickname second — a nickname is
+  // now account-scoped data, not device-local data collected before the
+  // account system ever entered the picture, so it shouldn't be asked for
+  // before login had its chance. If login is skipped (or the account
+  // that's signed into already has no nickname), login-onboarding.tsx
+  // itself chains into /nickname next — see its `finish()`. This effect
+  // just decides where a fresh boot should land: nowhere (already fully
+  // set up), login-onboarding (first time, signed out), or straight to
+  // nickname (signed in already, or login was skipped on an earlier
+  // launch — no need to ask about login again every time).
   useEffect(() => {
     let cancelled = false;
-    const openNicknameModal = () => {
-      // nickname.tsx chains straight into the login-onboarding step itself
-      // once it's done, so this branch doesn't also need to check it.
-      if (!cancelled) router.push("/nickname");
-    };
-    // Reached whenever the nickname modal *didn't* open — a returning
-    // device that already has a nickname (from an earlier session, a
-    // reinstall, etc.) still may never have seen the login step, so it
-    // can't ride on the nickname flow to trigger it.
-    const checkLoginOnboarding = async () => {
-      await ensureAccount();
-      if (cancelled || account.token) return;
-      if (await getLoginOnboardingSeen()) return;
-      if (!cancelled) router.push("/login-onboarding");
-    };
-    ensureSession()
-      .then(() => {
-        if (session.nickname) onboardingState.nicknameSet = true;
-        if (!onboardingState.nicknameSet) {
-          openNicknameModal();
-        } else {
-          checkLoginOnboarding();
-        }
-      })
-      .catch(() => {
-        // backend unreachable — fall back to whatever this session already
-        // knows rather than blocking the home screen indefinitely.
-        if (!onboardingState.nicknameSet) {
-          openNicknameModal();
-        } else {
-          checkLoginOnboarding();
-        }
-      });
+    (async () => {
+      await Promise.all([ensureSession(), ensureAccount()]);
+      if (cancelled) return;
+
+      const hasNickname = account.token ? !!account.info?.nickname : !!session.nickname;
+      if (hasNickname) {
+        onboardingState.nicknameSet = true;
+        return;
+      }
+
+      const loginSeen = await getLoginOnboardingSeen();
+      if (cancelled) return;
+      if (!account.token && !loginSeen) {
+        router.push("/login-onboarding");
+      } else {
+        router.push("/nickname");
+      }
+    })().catch(() => {
+      // backend/network unreachable — fall back to whatever's already
+      // known rather than blocking the home screen indefinitely.
+      if (!cancelled && !session.nickname && !account.token) {
+        router.push("/login-onboarding");
+      }
+    });
     return () => {
       cancelled = true;
     };
@@ -275,7 +285,14 @@ export default function HomeScreen() {
       easing: Easing.inOut(Easing.ease),
     });
 
-    await loadWeather();
+    // Without coords (a denied/timed-out/failed location fetch),
+    // loadWeather() can't do anything — retry location itself instead of
+    // just spinning the icon and reporting the same "정보 없음" again.
+    if (coords) {
+      await loadWeather();
+    } else {
+      await fetchLocation();
+    }
     setRefreshing(false);
   }
 

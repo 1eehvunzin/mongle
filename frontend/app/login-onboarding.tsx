@@ -6,20 +6,31 @@ import AuthButtons from "../components/AuthButtons";
 import { glass } from "../constants/aquaTheme";
 import { rs } from "../constants/scale";
 import { setLoginOnboardingSeen } from "../lib/localStore";
+import { AccountOut } from "../lib/api";
+import { session } from "../lib/session";
 
-// A dedicated onboarding step, not a section tacked onto nickname.tsx's
-// card — reached either right after it (nickname.tsx chains here once the
-// nickname is confirmed) or on its own for a returning device that already
-// has a nickname but has never seen this step (see home.tsx's boot check
-// and lib/localStore.ts's getLoginOnboardingSeen). Same dimmed-backdrop +
-// floating-card shape as nickname.tsx/consent.tsx.
+// The FIRST onboarding step now (see home.tsx's boot check) — nickname
+// used to be collected before any account was ever considered, which left
+// it stuck as device-local data disconnected from login entirely. Now
+// login comes first: signing in with an account that already has a
+// nickname (a returning device) skips nickname collection outright;
+// skipping login, or signing into a brand-new account, still asks for one
+// next (nickname.tsx), just after login had its chance rather than before.
+// Same dimmed-backdrop + floating-card shape as nickname.tsx/consent.tsx.
 export default function LoginOnboardingScreen() {
-  const dismiss = () => {
+  const finish = (signedInAccount?: AccountOut) => {
     setLoginOnboardingSeen().catch(() => {
       // best-effort — worst case this step offers itself again next launch.
     });
-    router.back();
+    const hasNickname = signedInAccount ? !!signedInAccount.nickname : !!session.nickname;
+    if (hasNickname) {
+      router.back();
+    } else {
+      router.replace("/nickname");
+    }
   };
+
+  const dismiss = () => finish();
 
   return (
     <View style={{ flex: 1 }}>
@@ -65,7 +76,7 @@ export default function LoginOnboardingScreen() {
           </Text>
 
           <View style={{ marginTop: rs(20) }}>
-            <AuthButtons onSignedIn={dismiss} />
+            <AuthButtons onSignedIn={finish} />
           </View>
 
           <Pressable onPress={dismiss} style={{ paddingVertical: rs(14), alignItems: "center" }}>

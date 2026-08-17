@@ -6,20 +6,23 @@ import Glass from "../components/Glass";
 import { glass } from "../constants/aquaTheme";
 import { onboardingState } from "../constants/onboarding";
 import { rs } from "../constants/scale";
-import { getLoginOnboardingSeen, setNickname as saveNickname } from "../lib/localStore";
+import { setNickname as saveNickname } from "../lib/localStore";
 import { session } from "../lib/session";
-import { account } from "../lib/auth";
 
 const MAX_LEN = 12;
 
 // A modal over the home screen (same dimmed-backdrop + floating-card shape
 // consent.tsx uses) rather than a standalone onboarding page — home renders
 // underneath from the very first frame instead of a blank page first.
+//
+// Only ever reached *after* login-onboarding.tsx has already had its turn
+// (skipped, or signed into an account that still has no nickname) — see
+// home.tsx's boot check — so there's nothing left to chain into here.
 export default function NicknameScreen() {
   const [nickname, setNickname] = useState("구름지기");
   const disabled = nickname.trim().length < 2;
 
-  const start = async () => {
+  const start = () => {
     onboardingState.nicknameSet = true;
     const trimmed = nickname.trim();
     session.nickname = trimmed;
@@ -27,17 +30,7 @@ export default function NicknameScreen() {
       // best-effort — the session flag above already lets this session
       // move on.
     });
-
-    // Chain straight into the login step (its own screen — see
-    // login-onboarding.tsx) rather than dumping both asks on one card.
-    // Skipped for anyone already signed in or who's seen it before, so this
-    // never re-appears for a returning user just because they're setting a
-    // new nickname.
-    if (!account.token && !(await getLoginOnboardingSeen())) {
-      router.replace("/login-onboarding");
-    } else {
-      router.back();
-    }
+    router.back();
   };
 
   return (

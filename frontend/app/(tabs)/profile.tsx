@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react";
 import {
   Alert,
-  DevSettings,
   Linking,
   Platform,
   Pressable,
@@ -17,7 +16,7 @@ import Glass from "../../components/Glass";
 import { Ionicons } from "@expo/vector-icons";
 import { glass } from "../../constants/aquaTheme";
 import { rs } from "../../constants/scale";
-import { getProfile, ProfileOut, resetAllLocalData } from "../../lib/localStore";
+import { getProfile, ProfileOut } from "../../lib/localStore";
 import { account, ensureAccount, signOut, withdraw } from "../../lib/auth";
 import { AccountOut } from "../../lib/api";
 
@@ -84,30 +83,6 @@ export default function ProfileScreen() {
             } catch {
               Alert.alert("오류", "탈퇴에 실패했어요. 잠시 후 다시 시도해주세요.");
             }
-          },
-        },
-      ],
-    );
-  };
-
-  // Dev-only escape hatch: clears the AsyncStorage keys that gate
-  // first-launch flows (nickname, login-onboarding "seen", etc.) so those
-  // screens re-trigger on next load without uninstalling the app. Also
-  // signs out — otherwise a still-valid session token would make
-  // login-onboarding skip itself again anyway.
-  const handleResetLocalData = () => {
-    Alert.alert(
-      "로컬 데이터 초기화",
-      "닉네임/로그인 표시/캐치 등 이 기기에 저장된 데이터가 모두 지워지고 앱이 재시작돼요. 서버 계정 자체는 지워지지 않아요.",
-      [
-        { text: "취소", style: "cancel" },
-        {
-          text: "초기화",
-          style: "destructive",
-          onPress: async () => {
-            await signOut();
-            await resetAllLocalData();
-            DevSettings.reload();
           },
         },
       ],
@@ -311,6 +286,7 @@ export default function ProfileScreen() {
           <Glass
             tone={glass.white}
             radius={rs(16)}
+            highlight={false}
             style={{
               borderWidth: 1,
               borderColor: glass.border,
@@ -335,33 +311,27 @@ export default function ProfileScreen() {
               label="피드백 보내기"
               onPress={sendFeedback}
             />
-            <SettingsRow
-              icon="information-circle-outline"
-              label="버전 정보"
-              value="1.0.0"
-              last={!accountInfo && !__DEV__}
-            />
-            {accountInfo ? (
-              <>
-                <SettingsRow icon="log-out-outline" label="로그아웃" onPress={handleLogout} />
-                <SettingsRow
-                  icon="trash-outline"
-                  label="계정 탈퇴"
-                  onPress={handleWithdraw}
-                  last={!__DEV__}
-                />
-              </>
-            ) : null}
-            {__DEV__ ? (
-              <SettingsRow
-                icon="refresh-outline"
-                label="로컬 데이터 초기화 (개발용)"
-                onPress={handleResetLocalData}
-                last
-              />
-            ) : null}
+            <SettingsRow icon="information-circle-outline" label="버전 정보" value="1.0.0" last />
           </Glass>
         </View>
+
+        {accountInfo ? (
+          <View style={{ marginHorizontal: rs(16), marginTop: rs(14) }}>
+            <Glass
+              tone={glass.white}
+              radius={rs(16)}
+              highlight={false}
+              style={{
+                borderWidth: 1,
+                borderColor: glass.border,
+                overflow: "hidden",
+              }}
+            >
+              <SettingsRow icon="log-out-outline" label="로그아웃" onPress={handleLogout} />
+              <SettingsRow icon="trash-outline" label="계정 탈퇴" onPress={handleWithdraw} last />
+            </Glass>
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -395,11 +365,23 @@ function SettingsRow({
       }}
     >
       <Ionicons name={icon} size={rs(17)} color={glass.sub} />
-      <Text style={{ flex: 1, fontSize: rs(13), color: glass.ink }}>
+      {/* label is fixed-width when there's a value to make room for
+          (so a long email truncates instead of squeezing/wrapping the
+          row) and only grows to fill the row when it's alone (chevron
+          rows), same as before. */}
+      <Text
+        style={value ? { fontSize: rs(13), color: glass.ink } : { flex: 1, fontSize: rs(13), color: glass.ink }}
+      >
         {label}
       </Text>
       {value ? (
-        <Text style={{ fontSize: rs(12), color: glass.subMuted }}>{value}</Text>
+        <Text
+          style={{ flex: 1, fontSize: rs(12), color: glass.subMuted, textAlign: "right" }}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          {value}
+        </Text>
       ) : (
         <Ionicons name="chevron-forward" size={rs(15)} color={glass.subMuted} />
       )}
