@@ -3,8 +3,9 @@ import Constants from "expo-constants";
 
 // The backend is the standalone FastAPI service in ../server — a thin proxy
 // for the two things that must stay server-side (the OpenAI and
-// OpenWeatherMap API keys). Everything else (catches, dex, profile, feed,
-// map) now lives entirely on-device — see lib/localStore.ts.
+// OpenWeatherMap API keys), plus Apple/Kakao sign-in and, once signed in, a
+// synced copy of catches/nickname (lib/localStore.ts decides whether to hit
+// these or AsyncStorage based on lib/auth.ts's account state).
 const API_PORT = 8000;
 
 export function getApiBaseUrl(): string {
@@ -21,6 +22,10 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
+  return handleApiResponse<T>(res);
+}
+
+async function handleApiResponse<T>(res: Response): Promise<T> {
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     const detail = data?.detail;
@@ -55,4 +60,98 @@ export type TodaySkyOut = {
 
 export function getTodaySky(lat: number, lng: number) {
   return apiFetch<TodaySkyOut>(`/api/today-sky?lat=${lat}&lng=${lng}`);
+}
+
+export type AccountOut = {
+  id: number;
+  email: string | null;
+  nickname: string | null;
+  created_at: string;
+};
+
+export function appleSignIn(identityToken: string, email: string | null) {
+  return apiFetch<{ token: string; account: AccountOut }>("/api/auth/apple", {
+    method: "POST",
+    body: JSON.stringify({ identity_token: identityToken, email }),
+  });
+}
+
+export function kakaoSignIn(accessToken: string) {
+  return apiFetch<{ token: string; account: AccountOut }>("/api/auth/kakao", {
+    method: "POST",
+    body: JSON.stringify({ access_token: accessToken }),
+  });
+}
+
+function authHeader(token: string): HeadersInit {
+  return { Authorization: `Bearer ${token}` };
+}
+
+export function getMe(token: string) {
+  return apiFetch<AccountOut>("/api/auth/me", { headers: authHeader(token) });
+}
+
+export function updateNickname(token: string, nickname: string) {
+  return apiFetch<AccountOut>("/api/auth/me", {
+    method: "PUT",
+    headers: authHeader(token),
+    body: JSON.stringify({ nickname }),
+  });
+}
+
+export async function withdrawAccount(token: string): Promise<void> {
+  await apiFetch<{ ok: boolean }>("/api/auth/withdraw", {
+    method: "DELETE",
+    headers: authHeader(token),
+  });
+}
+
+export type ServerCatch = {
+  id: number;
+  cloud_name: string;
+  cloud_type: string;
+  confidence: number | null;
+  finish: string;
+  memo: string | null;
+  place_name: string | null;
+  lat: number | null;
+  lng: number | null;
+  temp_c: number | null;
+  weather_condition: string | null;
+  photo_url: string | null;
+  captured_at: string;
+};
+
+export type CreateServerCatchInput = {
+  cloud_name: string;
+  cloud_type: string;
+  confidence: number | null;
+  finish: string;
+  memo?: string | null;
+  place_name?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  temp_c?: number | null;
+  weather_condition?: string | null;
+  photo_base64?: string | null;
+};
+
+export function createServerCatch(token: string, input: CreateServerCatchInput) {
+  return apiFetch<ServerCatch>("/api/catches", {
+    method: "POST",
+    headers: authHeader(token),
+    body: JSON.stringify(input),
+  });
+}
+
+export function getServerFeed(token: string, limit = 30) {
+  return apiFetch<ServerCatch[]>(`/api/catches?limit=${limit}`, { headers: authHeader(token) });
+}
+
+export function getServerMapPins(token: string, limit = 50) {
+  return apiFetch<ServerCatch[]>(`/api/catches/map?limit=${limit}`, { headers: authHeader(token) });
+}
+
+export function getServerCatch(token: string, id: number | string) {
+  return apiFetch<ServerCatch>(`/api/catches/${id}`, { headers: authHeader(token) });
 }

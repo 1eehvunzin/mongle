@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import {
+  Alert,
   Linking,
   Platform,
   Pressable,
@@ -12,10 +13,13 @@ import { useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import MongleMascot from "../../components/MongleMascot";
 import Glass from "../../components/Glass";
+import AuthButtons from "../../components/AuthButtons";
 import { Ionicons } from "@expo/vector-icons";
 import { glass } from "../../constants/aquaTheme";
 import { rs } from "../../constants/scale";
 import { getProfile, ProfileOut } from "../../lib/localStore";
+import { account, ensureAccount, signOut, withdraw } from "../../lib/auth";
+import { AccountOut } from "../../lib/api";
 
 const WEEK_LABELS = ["월", "화", "수", "목", "금", "토", "일"];
 
@@ -33,6 +37,7 @@ const STREAK_TONE = { top: glass.blue.mid, mid: glass.blue.rim, rim: "#356B7D", 
 export default function ProfileScreen() {
   const [profile, setProfile] = useState<ProfileOut | null>(null);
   const [profileRefreshing, setProfileRefreshing] = useState(false);
+  const [accountInfo, setAccountInfo] = useState<AccountOut | null>(account.info);
 
   const loadProfile = useCallback(async () => {
     try {
@@ -45,8 +50,52 @@ export default function ProfileScreen() {
   useFocusEffect(
     useCallback(() => {
       loadProfile();
+      ensureAccount().then(() => setAccountInfo(account.info));
     }, [loadProfile]),
   );
+
+  const handleSignedIn = (info: AccountOut) => {
+    setAccountInfo(info);
+    // A first-time sign-in may have just migrated local catches/nickname up
+    // to the account — reload so the profile card reflects that immediately.
+    loadProfile();
+  };
+
+  const handleLogout = () => {
+    Alert.alert("로그아웃", "로그아웃 하시겠어요?", [
+      { text: "취소", style: "cancel" },
+      {
+        text: "로그아웃",
+        style: "destructive",
+        onPress: async () => {
+          await signOut();
+          setAccountInfo(null);
+        },
+      },
+    ]);
+  };
+
+  const handleWithdraw = () => {
+    Alert.alert(
+      "계정 탈퇴",
+      "탈퇴하면 로그인 연결과 서버에 저장된 기록이 모두 사라져요. 계속할까요?",
+      [
+        { text: "취소", style: "cancel" },
+        {
+          text: "탈퇴하기",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await withdraw();
+              setAccountInfo(null);
+            } catch {
+              Alert.alert("오류", "탈퇴에 실패했어요. 잠시 후 다시 시도해주세요.");
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const onRefreshProfile = async () => {
     setProfileRefreshing(true);
@@ -241,6 +290,12 @@ export default function ProfileScreen() {
           </Glass>
         </View>
 
+        {!accountInfo ? (
+          <View style={{ marginHorizontal: rs(16) }}>
+            <AuthButtons onSignedIn={handleSignedIn} />
+          </View>
+        ) : null}
+
         <View style={{ marginHorizontal: rs(16) }}>
           <Glass
             tone={glass.white}
@@ -251,6 +306,13 @@ export default function ProfileScreen() {
               overflow: "hidden",
             }}
           >
+            {accountInfo ? (
+              <SettingsRow
+                icon="person-circle-outline"
+                label="연결된 계정"
+                value={accountInfo.email ?? "연결됨"}
+              />
+            ) : null}
             <SettingsRow
               icon="chatbubble-ellipses-outline"
               label="피드백 보내기"
@@ -260,8 +322,19 @@ export default function ProfileScreen() {
               icon="information-circle-outline"
               label="버전 정보"
               value="1.0.0"
-              last
+              last={!accountInfo}
             />
+            {accountInfo ? (
+              <>
+                <SettingsRow icon="log-out-outline" label="로그아웃" onPress={handleLogout} />
+                <SettingsRow
+                  icon="trash-outline"
+                  label="계정 탈퇴"
+                  onPress={handleWithdraw}
+                  last
+                />
+              </>
+            ) : null}
           </Glass>
         </View>
       </ScrollView>

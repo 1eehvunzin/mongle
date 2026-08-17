@@ -7,6 +7,8 @@ type Props = {
   rotateDeg?: number;
   children: ReactNode;
   style?: CSSProperties;
+  /** filter:drop-shadow composites badly onto a fully transparent PNG export (Chromium color-fringes the soft edge) — set false for cutout exports. */
+  shadow?: boolean;
 };
 
 // The screen cutout's exact position within Bezel.png, expressed as
@@ -25,7 +27,7 @@ export function getScreenSize(width: number, height: number) {
 // photoreal titanium iPhone with the dynamic island) rather than drawn in
 // CSS — the screen content sits underneath, cropped to the cutout's
 // percentage box, with the bezel PNG layered on top.
-export default function PhoneFrame({ width, height, rotateDeg = 0, children, style }: Props) {
+export default function PhoneFrame({ width, height, rotateDeg = 0, children, style, shadow = true }: Props) {
   const radius = Math.round(width * 0.13);
   return (
     <div
@@ -34,7 +36,7 @@ export default function PhoneFrame({ width, height, rotateDeg = 0, children, sty
         width,
         height,
         transform: `rotate(${rotateDeg}deg)`,
-        filter: "drop-shadow(0 46px 90px rgba(20,40,60,0.28))",
+        filter: shadow ? "drop-shadow(0 46px 90px rgba(20,40,60,0.28))" : undefined,
         ...style,
       }}
     >

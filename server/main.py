@@ -1,16 +1,20 @@
 """FastAPI backend for mongle: a thin proxy for the two things that must
-stay server-side — the OpenAI and OpenWeatherMap API keys.
+stay server-side — the OpenAI and OpenWeatherMap API keys — plus Apple
+Sign In and, for signed-in accounts, their synced catches (see auth.py and
+catches.py).
 
 /api/recognize is a port of the old Expo API route
 (frontend/app/api/recognize+api.ts) — same prompt, same species list, same
 response shape. /api/today-sky drives the home screen's weather card.
-Everything else (catches, dex, profile, feed, map) lives entirely on-device
-now — see frontend/lib/localStore.ts — so this server holds no user data at
-all.
+A signed-out device still keeps catches/nickname purely on-device (see
+frontend/lib/localStore.ts); once signed in, frontend/lib/localStore.ts
+switches to reading/writing them here instead, under the account's own
+`account_catches` rows.
 """
 
 import json
 import os
+import shutil
 from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
@@ -22,11 +26,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from openai import APIStatusError, AsyncOpenAI
 from pydantic import BaseModel
 
+import auth
+import catches
 from cloud_species import KNOWN_CLOUDS
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -41,6 +48,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+auth.init_db()
+catches.init_db()
+app.mount("/uploads", StaticFiles(directory=catches.UPLOADS_DIR), name="uploads")
+
+
+def current_account_id(authorization: str | None = Header(default=None)) -> int:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="로그인이 필요해요.")
+    return auth.decode_session_token(authorization.removeprefix("Bearer "))
+
 
 class RecognizeRequest(BaseModel):
     imageBase64: str
@@ -49,6 +66,107 @@ class RecognizeRequest(BaseModel):
 @app.get("/health")
 async def health():
     return {"ok": True}
+
+
+class AppleSignInRequest(BaseModel):
+    identity_token: str
+    email: str | None = None
+
+
+@app.post("/api/auth/apple")
+async def apple_sign_in(payload: AppleSignInRequest):
+    claims = await auth.verify_apple_identity_token(payload.identity_token)
+    apple_sub = claims.get("sub")
+    if not apple_sub:
+        raise HTTPException(status_code=401, detail="Apple 로그인 토큰이 올바르지 않아요.")
+
+    # The identity token itself only carries an email when Apple's relay
+    # forwards one; the client also passes along the (only-sent-once, only
+    # on first authorization) email from the native credential as a
+    # fallback so we don't lose it on the one chance we get it.
+    email = claims.get("email") or payload.email
+    account = auth.get_or_create_account("apple", apple_sub, email)
+    token = auth.create_session_token(account["id"])
+    return {"token": token, "account": auth.account_to_out(account)}
+
+
+class KakaoSignInRequest(BaseModel):
+    access_token: str
+
+
+@app.post("/api/auth/kakao")
+async def kakao_sign_in(payload: KakaoSignInRequest):
+    claims = await auth.verify_kakao_access_token(payload.access_token)
+    account = auth.get_or_create_account("kakao", claims["id"], claims.get("email"))
+    token = auth.create_session_token(account["id"])
+    return {"token": token, "account": auth.account_to_out(account)}
+
+
+@app.get("/api/auth/me")
+async def get_me(account_id: int = Depends(current_account_id)):
+    row = auth.get_account(account_id)
+    if row is None:
+        raise HTTPException(status_code=401, detail="계정을 찾을 수 없어요.")
+    return auth.account_to_out(row)
+
+
+class UpdateNicknameRequest(BaseModel):
+    nickname: str
+
+
+@app.put("/api/auth/me")
+async def update_me(payload: UpdateNicknameRequest, account_id: int = Depends(current_account_id)):
+    row = auth.update_nickname(account_id, payload.nickname)
+    return auth.account_to_out(row)
+
+
+@app.delete("/api/auth/withdraw")
+async def withdraw(account_id: int = Depends(current_account_id)):
+    auth.delete_account(account_id)
+    shutil.rmtree(os.path.join(catches.UPLOADS_DIR, str(account_id)), ignore_errors=True)
+    return {"ok": True}
+
+
+class CreateCatchRequest(BaseModel):
+    cloud_name: str
+    cloud_type: str
+    confidence: float | None = None
+    finish: str
+    memo: str | None = None
+    place_name: str | None = None
+    lat: float | None = None
+    lng: float | None = None
+    temp_c: float | None = None
+    weather_condition: str | None = None
+    photo_base64: str | None = None
+
+
+@app.post("/api/catches")
+async def create_catch(
+    payload: CreateCatchRequest, request: Request, account_id: int = Depends(current_account_id)
+):
+    row = catches.create_catch(account_id, payload.model_dump())
+    return catches.catch_to_out(row, str(request.base_url))
+
+
+@app.get("/api/catches")
+async def list_catches(request: Request, limit: int = 30, account_id: int = Depends(current_account_id)):
+    rows = catches.list_catches(account_id, limit)
+    return [catches.catch_to_out(r, str(request.base_url)) for r in rows]
+
+
+@app.get("/api/catches/map")
+async def list_map_pins(request: Request, limit: int = 50, account_id: int = Depends(current_account_id)):
+    rows = catches.list_map_pins(account_id, limit)
+    return [catches.catch_to_out(r, str(request.base_url)) for r in rows]
+
+
+@app.get("/api/catches/{catch_id}")
+async def get_catch(catch_id: int, request: Request, account_id: int = Depends(current_account_id)):
+    row = catches.get_catch(account_id, catch_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="기록을 찾을 수 없어요.")
+    return catches.catch_to_out(row, str(request.base_url))
 
 
 @app.post("/api/recognize")

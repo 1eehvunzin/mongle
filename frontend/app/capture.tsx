@@ -52,27 +52,48 @@ export default function CaptureScreen() {
   // blocking capture. Kept entirely client-side here — /api/recognize itself
   // never receives this, matching the consent screen's promise.
   useEffect(() => {
+    let cancelled = false;
+    const timeoutId = setTimeout(() => {
+      if (!cancelled) setPlaceName((prev) => prev ?? "위치 미확인");
+    }, 7000);
     (async () => {
-      const perm = await Location.requestForegroundPermissionsAsync();
-      if (!perm.granted) return;
       try {
+        const perm = await Location.requestForegroundPermissionsAsync();
+        if (!perm.granted) {
+          if (!cancelled) setPlaceName("위치 권한 필요");
+          return;
+        }
+
         const pos = await Location.getCurrentPositionAsync({});
+        if (cancelled) return;
         setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         getTodaySky(pos.coords.latitude, pos.coords.longitude)
           .then(setTodaySky)
           .catch(() => {
             // best-effort — the temp chip falls back to a placeholder below.
           });
-        const [place] = await Location.reverseGeocodeAsync({
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-        });
-        setPlaceName(place?.name ?? place?.district ?? place?.city ?? null);
+
+        try {
+          const [place] = await Location.reverseGeocodeAsync({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          });
+          if (!cancelled) {
+            setPlaceName(
+              place?.name ?? place?.district ?? place?.city ?? "현재 위치",
+            );
+          }
+        } catch {
+          if (!cancelled) setPlaceName("현재 위치");
+        }
       } catch {
-        // reverseGeocodeAsync isn't available on web, or the lookup failed —
-        // stay with the fallback label below.
+        if (!cancelled) setPlaceName("위치 미확인");
       }
     })();
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   // The photo itself is what's sent off for recognition, so this is the
@@ -152,7 +173,10 @@ export default function CaptureScreen() {
         photo_base64: photoBase64,
       });
       router.back();
-      router.push({ pathname: "/share", params: { catchId: String(saved.id) } });
+      router.push({
+        pathname: "/share",
+        params: { catchId: String(saved.id) },
+      });
     } catch (e) {
       console.error("createCatch failed", e);
       setRecognizeError("기록 저장에 실패했어요");

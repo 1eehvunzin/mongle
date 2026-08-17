@@ -3,11 +3,13 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import MongleMascot from "../components/MongleMascot";
 import Glass from "../components/Glass";
+import AuthButtons from "../components/AuthButtons";
 import { glass } from "../constants/aquaTheme";
 import { onboardingState } from "../constants/onboarding";
 import { rs } from "../constants/scale";
 import { setNickname as saveNickname } from "../lib/localStore";
 import { session } from "../lib/session";
+import { AccountOut } from "../lib/api";
 
 const MAX_LEN = 12;
 
@@ -27,6 +29,14 @@ export default function NicknameScreen() {
       // best-effort — the session flag above already lets this session
       // move on.
     });
+  };
+
+  // A returning user's account may already carry a nickname from another
+  // device — prefill it rather than making them retype it, but still let
+  // them review/edit and confirm with the same "시작하기" button as anyone
+  // signing in for the first time.
+  const handleSignedIn = (info: AccountOut) => {
+    if (info.nickname) setNickname(info.nickname);
   };
 
   return (
@@ -80,10 +90,10 @@ export default function NicknameScreen() {
               at its trailing edge, the way an actual iOS text field reads,
               not a labeled "NICKNAME" form card. */}
           <View style={{ marginTop: rs(20) }}>
-            <Glass
-              tone={glass.white}
-              radius={rs(999)}
+            <View
               style={{
+                borderRadius: rs(999),
+                backgroundColor: "rgba(255,255,255,0.96)",
                 flexDirection: "row",
                 alignItems: "center",
                 paddingLeft: rs(18),
@@ -97,20 +107,22 @@ export default function NicknameScreen() {
                 value={nickname}
                 onChangeText={(t) => setNickname(t.slice(0, MAX_LEN))}
                 maxLength={MAX_LEN}
-                className="font-bold"
                 style={{
                   flex: 1,
                   fontSize: rs(16),
+                  fontWeight: "700",
+                  fontFamily: "Pretendard-Bold",
                   color: glass.ink,
                   padding: 0,
                 }}
+                selectionColor={glass.accent}
                 placeholder="닉네임"
                 placeholderTextColor={glass.subMuted}
               />
               <Text style={{ fontSize: rs(11), color: glass.subMuted }}>
                 {nickname.length}/{MAX_LEN}
               </Text>
-            </Glass>
+            </View>
             <Text
               style={{
                 fontSize: rs(11),
@@ -145,6 +157,23 @@ export default function NicknameScreen() {
               </Text>
             </Glass>
           </Pressable>
+
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              marginTop: rs(16),
+              marginBottom: rs(12),
+              gap: rs(8),
+            }}
+          >
+            <View style={{ flex: 1, height: 1, backgroundColor: glass.border }} />
+            <Text style={{ fontSize: rs(10.5), color: glass.subMuted }}>
+              또는 계정으로 계속하기
+            </Text>
+            <View style={{ flex: 1, height: 1, backgroundColor: glass.border }} />
+          </View>
+          <AuthButtons onSignedIn={handleSignedIn} />
         </Glass>
       </View>
     </View>

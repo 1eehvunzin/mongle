@@ -6,6 +6,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
 import { ensureSession, session } from "../lib/session";
+import { ensureAccount } from "../lib/auth";
 import { seedDevCatchesOnce } from "../lib/devSeed";
 import { captureConsent } from "../constants/consent";
 import { onboardingState } from "../constants/onboarding";
@@ -33,6 +34,9 @@ export default function RootLayout() {
       .catch(() => {
         // backend unreachable — screens fall back to session-only gating.
       });
+    ensureAccount().catch(() => {
+      // best-effort — screens fall back to signed-out state.
+    });
     seedDevCatchesOnce().catch(() => {
       // best-effort dev-only seed — a failure here shouldn't block the app.
     });

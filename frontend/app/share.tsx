@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   ImageBackground,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -66,8 +67,13 @@ export default function ShareScreen() {
       .catch(() => setLoadError(true));
   }, [catchId]);
 
-  const bubbleText = item?.memo?.trim() ? item.memo.trim() : "오늘 하늘 미쳤다 ☁️";
+  const bubbleText = item?.memo?.trim()
+    ? item.memo.trim()
+    : "오늘 하늘 미쳤다 ☁️";
   const photoUrl = item?.photo_url ?? null;
+  const shareUrl = item
+    ? `https://mongle.expo.app/share?catchId=${item.id}`
+    : "https://mongle.expo.app";
 
   const availableHeight = screenH - insets.top - insets.bottom - CHROME_HEIGHT;
   const widthFromHeight = availableHeight * (9 / 16);
@@ -95,7 +101,7 @@ export default function ShareScreen() {
 
   const copyLink = async () => {
     if (!item) return;
-    await Clipboard.setStringAsync(`mongle://catch/${item.id}`);
+    await Clipboard.setStringAsync(shareUrl);
     setLinkCopied(true);
     setTimeout(() => setLinkCopied(false), 1500);
   };
@@ -103,27 +109,73 @@ export default function ShareScreen() {
   const shareStory = async () => {
     if (!item || sharing) return;
     setSharing(true);
+    let shouldClose = false;
     try {
-      setExportingFlat(true);
-      // Let the corner-radius style change above actually paint before the
-      // native view snapshot is taken — captureRef reads whatever's on
-      // screen at that instant.
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-      await new Promise((resolve) => requestAnimationFrame(resolve));
+      if (Platform.OS === "web") {
+        const nav = globalThis.navigator as Navigator & {
+          share?: (data: any) => Promise<void>;
+          canShare?: (data: any) => boolean;
+        };
 
-      const uri = await captureRef(cardRef, { format: "jpg", quality: 0.92 });
-      setExportingFlat(false);
+        if (nav.share) {
+          const sharePayload: {
+            title: string;
+            text: string;
+            url?: string;
+            files?: File[];
+          } = {
+            title: "몽글 스토리",
+            text: `${item.cloud_name} · ${item.cloud_type}`,
+            url: shareUrl,
+          };
 
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, { dialogTitle: "몽글 스토리 공유하기" });
+          if (photoUrl) {
+            try {
+              const res = await fetch(photoUrl);
+              const blob = await res.blob();
+              const file = new File([blob], `mongle-catch-${item.id}.jpg`, {
+                type: blob.type || "image/jpeg",
+              });
+              if (nav.canShare?.({ files: [file] })) {
+                sharePayload.files = [file];
+                delete sharePayload.url;
+              }
+            } catch {
+              // If remote image fetch is blocked (CORS, offline), fallback to URL share.
+            }
+          }
+
+          await nav.share(sharePayload);
+          shouldClose = true;
+        } else {
+          await Clipboard.setStringAsync(shareUrl);
+          setLinkCopied(true);
+          setTimeout(() => setLinkCopied(false), 1500);
+        }
+      } else {
+        setExportingFlat(true);
+        // Let the corner-radius style change above actually paint before the
+        // native view snapshot is taken — captureRef reads whatever's on
+        // screen at that instant.
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        const uri = await captureRef(cardRef, { format: "jpg", quality: 0.92 });
+        setExportingFlat(false);
+
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(uri, {
+            dialogTitle: "몽글 스토리 공유하기",
+          });
+          shouldClose = true;
+        }
       }
     } catch {
-      // best-effort — sharing isn't available on this platform/build, or the
-      // user cancelled the share sheet. Either way, still head back home.
+      // best-effort — user cancelled or sharing isn't available.
     } finally {
       setExportingFlat(false);
       setSharing(false);
-      router.back();
+      if (shouldClose) router.back();
     }
   };
 
@@ -294,7 +346,11 @@ export default function ShareScreen() {
               }}
             >
               <View
-                style={{ flexDirection: "row", alignItems: "center", gap: rs(6) }}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: rs(6),
+                }}
               >
                 <Ionicons
                   name={
@@ -325,9 +381,7 @@ export default function ShareScreen() {
               </View>
             </Glass>
           </Pressable>
-          {/* Disabled for now — the mongle:// deep link this copies doesn't
-              resolve to anything yet. */}
-          <Pressable style={{ flex: 1 }} disabled>
+          <Pressable style={{ flex: 1 }} onPress={copyLink} disabled={!item}>
             <Glass
               tone={glass.white}
               radius={rs(12)}
@@ -336,25 +390,29 @@ export default function ShareScreen() {
                 paddingVertical: rs(11),
                 borderWidth: 1,
                 borderColor: glass.border,
-                opacity: 0.4,
+                opacity: item ? 1 : 0.4,
               }}
             >
               <View
-                style={{ flexDirection: "row", alignItems: "center", gap: rs(6) }}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: rs(6),
+                }}
               >
                 <Ionicons
-                  name="link-outline"
+                  name={linkCopied ? "checkmark" : "link-outline"}
                   size={rs(14)}
-                  color={glass.subMuted}
+                  color={item ? glass.ink : glass.subMuted}
                 />
                 <Text
                   style={{
                     fontSize: rs(12),
                     fontWeight: "600",
-                    color: glass.subMuted,
+                    color: item ? glass.ink : glass.subMuted,
                   }}
                 >
-                  링크
+                  {linkCopied ? "복사됨" : "링크"}
                 </Text>
               </View>
             </Glass>
@@ -377,7 +435,11 @@ export default function ShareScreen() {
               {sharing ? (
                 <ActivityIndicator size="small" color={glass.ink} />
               ) : (
-                <Ionicons name="share-outline" size={rs(15)} color={glass.ink} />
+                <Ionicons
+                  name="share-outline"
+                  size={rs(15)}
+                  color={glass.ink}
+                />
               )}
               <Text
                 className="font-bold"

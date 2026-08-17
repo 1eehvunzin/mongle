@@ -91,22 +91,44 @@ export default function HomeScreen() {
   // permission or a platform without reverse geocoding (web) just falls
   // back to a plain label instead of blocking the card.
   useEffect(() => {
+    let cancelled = false;
+    const timeoutId = setTimeout(() => {
+      if (!cancelled) setPlaceName((prev) => prev ?? "위치 미확인");
+    }, 7000);
     (async () => {
-      const perm = await Location.requestForegroundPermissionsAsync();
-      if (!perm.granted) return;
       try {
+        const perm = await Location.requestForegroundPermissionsAsync();
+        if (!perm.granted) {
+          if (!cancelled) setPlaceName("위치 권한 필요");
+          return;
+        }
+
         const pos = await Location.getCurrentPositionAsync({});
+        if (cancelled) return;
         setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        const [place] = await Location.reverseGeocodeAsync({
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-        });
-        setPlaceName(place?.name ?? place?.district ?? place?.city ?? null);
+
+        try {
+          const [place] = await Location.reverseGeocodeAsync({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          });
+          if (!cancelled) {
+            setPlaceName(
+              place?.name ?? place?.district ?? place?.city ?? "현재 위치",
+            );
+          }
+        } catch {
+          // reverseGeocodeAsync isn't available on web in many browsers.
+          if (!cancelled) setPlaceName("현재 위치");
+        }
       } catch {
-        // reverseGeocodeAsync isn't available on web, or the lookup failed —
-        // stay with the fallback label below.
+        if (!cancelled) setPlaceName("위치 미확인");
       }
     })();
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   const loadWeather = useCallback(async () => {
@@ -204,7 +226,10 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: rs(108) }}
         refreshControl={
-          <RefreshControl refreshing={homeRefreshing} onRefresh={onRefreshHome} />
+          <RefreshControl
+            refreshing={homeRefreshing}
+            onRefresh={onRefreshHome}
+          />
         }
       >
         <View
@@ -259,7 +284,11 @@ export default function HomeScreen() {
                     gap: rs(6),
                   }}
                 >
-                  <Ionicons name={conditionIcon} size={rs(13)} color={glass.ink} />
+                  <Ionicons
+                    name={conditionIcon}
+                    size={rs(13)}
+                    color={glass.ink}
+                  />
                   <Text
                     className="font-bold"
                     style={{ fontSize: rs(11), color: glass.ink }}
@@ -443,8 +472,7 @@ export default function HomeScreen() {
                     <Text className="font-bold">
                       {todaySky?.cloud_name ?? "뭉게구름"}
                     </Text>
-                    이 잘
-                    보이는 날! 찍어서 채워볼까?
+                    이 잘 보이는 날! 찍어서 채워볼까?
                   </Text>
                   <Ionicons name="camera" size={rs(16)} color={glass.ink} />
                 </View>

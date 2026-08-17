@@ -1,7 +1,10 @@
-// All catch/profile data now lives entirely on-device — no backend DB.
-// AsyncStorage holds the JSON records; expo-file-system holds the photos.
-// /api/recognize and /api/today-sky are the only things that still need a
-// server (they hold the OpenAI/OpenWeatherMap keys), see lib/api.ts.
+// Catch/profile data lives on-device (AsyncStorage for the JSON records,
+// expo-file-system for the photos) for a signed-out device. Once
+// lib/auth.ts's `account.token` is set, every function below switches to
+// reading/writing the account's synced copy on the server instead — see
+// lib/api.ts's /api/catches endpoints. Species metadata (dex number,
+// rarity, stars) stays purely client-side either way; the server only ever
+// sees the raw fields a catch was created with.
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system/legacy";
@@ -14,6 +17,15 @@ import {
   starsToStr,
 } from "./cloudSpecies";
 import { computeLevel } from "./levelSystem";
+import { account } from "./auth";
+import {
+  createServerCatch,
+  getServerCatch,
+  getServerFeed,
+  getServerMapPins,
+  ServerCatch,
+  updateNickname as updateServerNickname,
+} from "./api";
 
 const CATCHES_KEY = "mongle.catches";
 const NICKNAME_KEY = "mongle.nickname";
@@ -63,6 +75,39 @@ async function readCatches(): Promise<StoredCatch[]> {
 
 async function writeCatches(catches: StoredCatch[]): Promise<void> {
   await AsyncStorage.setItem(CATCHES_KEY, JSON.stringify(catches));
+}
+
+// The server never learns species metadata — it only round-trips the raw
+// fields a catch was created with — so a server row maps onto the same
+// StoredCatch shape the rest of this file already knows how to turn into a
+// CatchOut via toOut().
+function serverCatchToStored(c: ServerCatch): StoredCatch {
+  return {
+    id: c.id,
+    cloudName: c.cloud_name,
+    cloudType: c.cloud_type,
+    confidence: c.confidence,
+    finish: c.finish as CloudTier,
+    memo: c.memo,
+    placeName: c.place_name,
+    lat: c.lat,
+    lng: c.lng,
+    tempC: c.temp_c,
+    weatherCondition: c.weather_condition,
+    photoUri: c.photo_url,
+    capturedAt: c.captured_at,
+  };
+}
+
+// Every read path (feed/map/profile/home) needs the full catch list either
+// way — this is the one place that decides whether that means "ask the
+// server" or "read AsyncStorage".
+async function resolveCatches(limit = 500): Promise<StoredCatch[]> {
+  if (account.token) {
+    const rows = await getServerFeed(account.token, limit);
+    return rows.map(serverCatchToStored);
+  }
+  return readCatches();
 }
 
 async function nextId(): Promise<number> {
@@ -135,13 +180,32 @@ export type CreateCatchInput = {
 };
 
 export async function createCatch(input: CreateCatchInput): Promise<CatchOut> {
+  const finish = finishForConfidence(input.confidence ?? null);
+
+  if (account.token) {
+    const row = await createServerCatch(account.token, {
+      cloud_name: input.cloud_name,
+      cloud_type: input.cloud_type,
+      confidence: input.confidence ?? null,
+      finish,
+      memo: input.memo ?? null,
+      place_name: input.place_name ?? null,
+      lat: input.lat ?? null,
+      lng: input.lng ?? null,
+      temp_c: input.temp_c ?? null,
+      weather_condition: input.weather_condition ?? null,
+      photo_base64: input.photo_base64 ?? null,
+    });
+    return toOut(serverCatchToStored(row));
+  }
+
   const catches = await readCatches();
   const stored: StoredCatch = {
     id: await nextId(),
     cloudName: input.cloud_name,
     cloudType: input.cloud_type,
     confidence: input.confidence ?? null,
-    finish: finishForConfidence(input.confidence ?? null),
+    finish,
     memo: input.memo ?? null,
     placeName: input.place_name ?? null,
     lat: input.lat ?? null,
@@ -157,6 +221,10 @@ export async function createCatch(input: CreateCatchInput): Promise<CatchOut> {
 }
 
 export async function getCatch(id: number | string): Promise<CatchOut> {
+  if (account.token) {
+    const row = await getServerCatch(account.token, id);
+    return toOut(serverCatchToStored(row));
+  }
   const catches = await readCatches();
   const found = catches.find((c) => c.id === Number(id));
   if (!found) throw new Error("기록을 찾을 수 없어요.");
@@ -164,12 +232,16 @@ export async function getCatch(id: number | string): Promise<CatchOut> {
 }
 
 export async function getFeed(limit = 30): Promise<CatchOut[]> {
-  const catches = await readCatches();
+  const catches = await resolveCatches(limit);
   const sorted = [...catches].sort((a, b) => b.id - a.id).slice(0, limit);
   return Promise.all(sorted.map(toOut));
 }
 
 export async function getMapPins(): Promise<CatchOut[]> {
+  if (account.token) {
+    const rows = await getServerMapPins(account.token, 50);
+    return Promise.all(rows.map((r) => toOut(serverCatchToStored(r))));
+  }
   const catches = await readCatches();
   const withLocation = catches
     .filter((c) => c.lat != null && c.lng != null)
@@ -179,11 +251,17 @@ export async function getMapPins(): Promise<CatchOut[]> {
 }
 
 export async function getNickname(): Promise<string | null> {
+  if (account.token) return account.info?.nickname ?? null;
   return AsyncStorage.getItem(NICKNAME_KEY);
 }
 
 export async function setNickname(nickname: string): Promise<void> {
+  // Always mirrored locally too, even when signed in — so the nickname
+  // survives a logout/withdraw without another round trip.
   await AsyncStorage.setItem(NICKNAME_KEY, nickname);
+  if (account.token) {
+    account.info = await updateServerNickname(account.token, nickname);
+  }
 }
 
 export async function getConsent(): Promise<boolean> {
@@ -290,7 +368,7 @@ export type ProfileOut = {
 };
 
 export async function getProfile(): Promise<ProfileOut> {
-  const catches = await readCatches();
+  const catches = await resolveCatches();
   const dateKeys = catches.map((c) => toLocalDateKey(c.capturedAt));
   const { current, longest } = streaks(dateKeys);
   const lvl = computeLevel(catches.length);
@@ -322,7 +400,7 @@ export type HomeOut = {
 };
 
 export async function getHome(): Promise<HomeOut> {
-  const catches = await readCatches();
+  const catches = await resolveCatches();
   const dateKeys = catches.map((c) => toLocalDateKey(c.capturedAt));
   const { current } = streaks(dateKeys);
   const lvl = computeLevel(catches.length);
@@ -349,4 +427,60 @@ export async function getBestFinishBySpecies(): Promise<Record<string, CloudTier
   const result: Record<string, CloudTier> = {};
   for (const [name, finishes] of bySpecies) result[name] = bestFinish(finishes);
   return result;
+}
+
+const MIGRATED_KEY = "mongle.migratedToServer";
+
+async function photoUriToBase64(uri: string): Promise<string | null> {
+  if (uri.startsWith("data:")) return uri;
+  try {
+    return await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+  } catch {
+    return null;
+  }
+}
+
+// Runs once, right after a device's first successful sign-in (see
+// lib/auth.ts): pushes whatever nickname/catches already exist locally up
+// to the account, so signing in doesn't make pre-existing on-device data
+// disappear from the feed. Guarded by MIGRATED_KEY so a later logout/login
+// on the same device never re-uploads and duplicates catches — there's no
+// server-side idempotency key to dedupe on otherwise.
+export async function migrateLocalDataToServer(token: string): Promise<void> {
+  if (await AsyncStorage.getItem(MIGRATED_KEY)) return;
+
+  const localNickname = await AsyncStorage.getItem(NICKNAME_KEY);
+  if (localNickname) {
+    try {
+      await updateServerNickname(token, localNickname);
+    } catch {
+      // best-effort — worst case the nickname just needs re-entering.
+    }
+  }
+
+  const localCatches = await readCatches();
+  for (const c of localCatches) {
+    try {
+      await createServerCatch(token, {
+        cloud_name: c.cloudName,
+        cloud_type: c.cloudType,
+        confidence: c.confidence,
+        finish: c.finish,
+        memo: c.memo,
+        place_name: c.placeName,
+        lat: c.lat,
+        lng: c.lng,
+        temp_c: c.tempC,
+        weather_condition: c.weatherCondition,
+        photo_base64: c.photoUri ? await photoUriToBase64(c.photoUri) : null,
+      });
+    } catch {
+      // best-effort per catch — one bad photo/network blip shouldn't stop
+      // the rest of the migration.
+    }
+  }
+
+  await AsyncStorage.setItem(MIGRATED_KEY, "1");
 }
