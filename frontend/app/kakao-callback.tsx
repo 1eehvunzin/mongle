@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Platform, Pressable, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import MongleMascot from "../components/MongleMascot";
@@ -19,6 +19,9 @@ export default function KakaoCallbackScreen() {
     error?: string;
   }>();
   const [status, setStatus] = useState<"working" | "error">("working");
+  const [errorMessage, setErrorMessage] =
+    useState("카카오 로그인에 실패했어요.");
+  const codeHandled = useRef(false);
 
   useEffect(() => {
     if (kakaoError) {
@@ -26,24 +29,61 @@ export default function KakaoCallbackScreen() {
       router.replace("/home");
       return;
     }
-    if (!code) {
+    if (!code || codeHandled.current) {
       setStatus("error");
       return;
     }
+    codeHandled.current = true;
+    if (Platform.OS === "web") {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
     completeKakaoWebSignIn(code)
       .then(() => router.replace("/home"))
-      .catch(() => setStatus("error"));
+      .catch((error: unknown) => {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "카카오 로그인에 실패했어요.",
+        );
+        setStatus("error");
+      });
   }, [code, kakaoError]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: glass.bg }}>
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: rs(20) }}>
-        <Glass tone={glass.white} radius={rs(24)} style={{ padding: rs(24), alignItems: "center", width: "100%", maxWidth: rs(320) }}>
+      <View
+        style={{
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          paddingHorizontal: rs(20),
+        }}
+      >
+        <Glass
+          tone={glass.white}
+          radius={rs(24)}
+          style={{
+            padding: rs(24),
+            alignItems: "center",
+            width: "100%",
+            maxWidth: rs(320),
+          }}
+        >
           <MongleMascot size={52} bob duration={3400} />
           {status === "working" ? (
             <>
-              <ActivityIndicator size="small" color={glass.ink} style={{ marginTop: rs(16) }} />
-              <Text style={{ fontSize: rs(12.5), color: glass.sub, marginTop: rs(10) }}>
+              <ActivityIndicator
+                size="small"
+                color={glass.ink}
+                style={{ marginTop: rs(16) }}
+              />
+              <Text
+                style={{
+                  fontSize: rs(12.5),
+                  color: glass.sub,
+                  marginTop: rs(10),
+                }}
+              >
                 로그인하는 중이에요…
               </Text>
             </>
@@ -51,13 +91,28 @@ export default function KakaoCallbackScreen() {
             <>
               <Text
                 className="font-bold"
-                style={{ fontSize: rs(15), color: glass.ink, marginTop: rs(16), textAlign: "center" }}
+                style={{
+                  fontSize: rs(15),
+                  color: glass.ink,
+                  marginTop: rs(16),
+                  textAlign: "center",
+                }}
               >
-                로그인에 실패했어요
+                {errorMessage}
               </Text>
-              <Pressable onPress={() => router.replace("/home")} style={{ marginTop: rs(14) }}>
-                <Glass tone={glass.blue} radius={rs(999)} style={{ paddingVertical: rs(12), paddingHorizontal: rs(24) }}>
-                  <Text className="font-bold" style={{ fontSize: rs(13), color: glass.ink }}>
+              <Pressable
+                onPress={() => router.replace("/home")}
+                style={{ marginTop: rs(14) }}
+              >
+                <Glass
+                  tone={glass.blue}
+                  radius={rs(999)}
+                  style={{ paddingVertical: rs(12), paddingHorizontal: rs(24) }}
+                >
+                  <Text
+                    className="font-bold"
+                    style={{ fontSize: rs(13), color: glass.ink }}
+                  >
                     홈으로 돌아가기
                   </Text>
                 </Glass>

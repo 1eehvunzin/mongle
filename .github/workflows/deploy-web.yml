@@ -28,6 +28,8 @@ jobs:
       - run: npx expo export -p web
         env:
           EXPO_PUBLIC_API_URL: https://mongle-ruby.vercel.app
+          EXPO_PUBLIC_APPLE_SERVICES_ID: mongle.cloud.app.web
+          EXPO_PUBLIC_APPLE_WEB_REDIRECT_URI: https://mongle.expo.app/home
 
       - run: npx eas deploy --prod --non-interactive
         env:

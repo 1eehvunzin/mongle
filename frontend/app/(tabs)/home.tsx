@@ -27,7 +27,7 @@ import { rs } from "../../constants/scale";
 import { getApiBaseUrl, getTodaySky, TodaySkyOut } from "../../lib/api";
 import { getHome, getLoginOnboardingSeen, HomeOut } from "../../lib/localStore";
 import { ensureSession, session } from "../../lib/session";
-import { account, ensureAccount } from "../../lib/auth";
+import { account, completeKakaoWebSignIn, ensureAccount } from "../../lib/auth";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -79,7 +79,7 @@ function formatTime(date: Date) {
 const RECENT_TINTS = [glass.white, glass.blue, glass.gray];
 
 export default function HomeScreen() {
-  const [updatedAt, setUpdatedAt] = useState(new Date());
+  const [updatedAt, setUpdatedAt] = useState(new Date(0));
   const [refreshing, setRefreshing] = useState(false);
   const [home, setHome] = useState<HomeOut | null>(null);
   const [homeRefreshing, setHomeRefreshing] = useState(false);
@@ -94,6 +94,29 @@ export default function HomeScreen() {
   // masquerade as a real (wrong) reading.
   const [weatherStatus, setWeatherStatus] = useState<"loading" | "error" | "loaded">("loading");
   const spin = useSharedValue(0);
+  const kakaoCodeHandled = useRef(false);
+
+  useEffect(() => {
+    setUpdatedAt(new Date());
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const kakaoCode = params.get("code");
+    const kakaoError = params.get("error");
+    if (kakaoError || !kakaoCode || kakaoCodeHandled.current) return;
+    kakaoCodeHandled.current = true;
+    window.history.replaceState({}, "", window.location.pathname);
+
+    completeKakaoWebSignIn(kakaoCode)
+      .then(() => router.replace("/home"))
+      .catch((error: unknown) => {
+        console.error("[kakao/web] sign-in failed", error);
+        window.alert(error instanceof Error ? error.message : "카카오 로그인에 실패했어요.");
+        router.replace("/home");
+      });
+  }, []);
 
   // fetchLocation below is called both on mount and from the refresh
   // button, so it can't rely on a per-effect `cancelled` closure the way a

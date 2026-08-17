@@ -18,19 +18,37 @@ export function getApiBaseUrl(): string {
 }
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
-  });
-  return handleApiResponse<T>(res);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const res = await fetch(`${getApiBaseUrl()}${path}`, {
+      ...init,
+      signal: init?.signal ?? controller.signal,
+      headers: { "Content-Type": "application/json", ...init?.headers },
+    });
+    return handleApiResponse<T>(res);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("서버 응답이 늦어요. 잠시 후 다시 시도해주세요.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function handleApiResponse<T>(res: Response): Promise<T> {
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     const detail = data?.detail;
+    const providerDetail = detail?.detail;
+    const providerMessage =
+      providerDetail?.error_description ?? providerDetail?.error;
     const message =
-      typeof detail === "string" ? detail : detail?.error ?? "요청에 실패했어요";
+      typeof detail === "string"
+        ? detail
+        : [detail?.error, providerMessage].filter(Boolean).join(": ") ||
+          "요청에 실패했어요";
     throw new Error(message);
   }
   return data as T;
@@ -147,7 +165,10 @@ export type CreateServerCatchInput = {
   photo_base64?: string | null;
 };
 
-export function createServerCatch(token: string, input: CreateServerCatchInput) {
+export function createServerCatch(
+  token: string,
+  input: CreateServerCatchInput,
+) {
   return apiFetch<ServerCatch>("/api/catches", {
     method: "POST",
     headers: authHeader(token),
@@ -156,13 +177,19 @@ export function createServerCatch(token: string, input: CreateServerCatchInput) 
 }
 
 export function getServerFeed(token: string, limit = 30) {
-  return apiFetch<ServerCatch[]>(`/api/catches?limit=${limit}`, { headers: authHeader(token) });
+  return apiFetch<ServerCatch[]>(`/api/catches?limit=${limit}`, {
+    headers: authHeader(token),
+  });
 }
 
 export function getServerMapPins(token: string, limit = 50) {
-  return apiFetch<ServerCatch[]>(`/api/catches/map?limit=${limit}`, { headers: authHeader(token) });
+  return apiFetch<ServerCatch[]>(`/api/catches/map?limit=${limit}`, {
+    headers: authHeader(token),
+  });
 }
 
 export function getServerCatch(token: string, id: number | string) {
-  return apiFetch<ServerCatch>(`/api/catches/${id}`, { headers: authHeader(token) });
+  return apiFetch<ServerCatch>(`/api/catches/${id}`, {
+    headers: authHeader(token),
+  });
 }

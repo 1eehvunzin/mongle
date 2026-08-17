@@ -23,20 +23,35 @@ import { AccountOut } from "../../lib/api";
 const WEEK_LABELS = ["월", "화", "수", "목", "금", "토", "일"];
 
 function sendFeedback() {
-  Linking.openURL("mailto:monglegroom@gmail.com?subject=" + encodeURIComponent("몽글 피드백"));
+  Linking.openURL(
+    "mailto:monglegroom@gmail.com?subject=" + encodeURIComponent("몽글 피드백"),
+  );
 }
 
 // Both the streak card and the contribution graph now draw from the same
 // glass.blue family the rest of the app (home/feed/tab bar) already uses —
 // mock.ts's own heatColors was a different, more saturated blue left over
 // from the old theme, which is exactly what read as mismatched.
-const HEAT_COLORS = [glass.border, glass.blue.top, glass.blue.mid, "#7BB4C8", glass.blue.rim];
-const STREAK_TONE = { top: glass.blue.mid, mid: glass.blue.rim, rim: "#356B7D", shadow: "#356B7D" };
+const HEAT_COLORS = [
+  glass.border,
+  glass.blue.top,
+  glass.blue.mid,
+  "#7BB4C8",
+  glass.blue.rim,
+];
+const STREAK_TONE = {
+  top: glass.blue.mid,
+  mid: glass.blue.rim,
+  rim: "#356B7D",
+  shadow: "#356B7D",
+};
 
 export default function ProfileScreen() {
   const [profile, setProfile] = useState<ProfileOut | null>(null);
   const [profileRefreshing, setProfileRefreshing] = useState(false);
-  const [accountInfo, setAccountInfo] = useState<AccountOut | null>(account.info);
+  const [accountInfo, setAccountInfo] = useState<AccountOut | null>(
+    account.info,
+  );
 
   const loadProfile = useCallback(async () => {
     try {
@@ -53,7 +68,17 @@ export default function ProfileScreen() {
     }, [loadProfile]),
   );
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (Platform.OS === "web") {
+      const confirmed = (globalThis as any).window?.confirm(
+        "로그아웃 하시겠어요?",
+      );
+      if (!confirmed) return;
+      await signOut();
+      setAccountInfo(null);
+      return;
+    }
+
     Alert.alert("로그아웃", "로그아웃 하시겠어요?", [
       { text: "취소", style: "cancel" },
       {
@@ -67,7 +92,23 @@ export default function ProfileScreen() {
     ]);
   };
 
-  const handleWithdraw = () => {
+  const handleWithdraw = async () => {
+    if (Platform.OS === "web") {
+      const confirmed = (globalThis as any).window?.confirm(
+        "탈퇴하면 로그인 연결과 서버에 저장된 기록이 모두 사라져요. 계속할까요?",
+      );
+      if (!confirmed) return;
+      try {
+        await withdraw();
+        setAccountInfo(null);
+      } catch {
+        (globalThis as any).window?.alert(
+          "탈퇴에 실패했어요. 잠시 후 다시 시도해주세요.",
+        );
+      }
+      return;
+    }
+
     Alert.alert(
       "계정 탈퇴",
       "탈퇴하면 로그인 연결과 서버에 저장된 기록이 모두 사라져요. 계속할까요?",
@@ -81,7 +122,10 @@ export default function ProfileScreen() {
               await withdraw();
               setAccountInfo(null);
             } catch {
-              Alert.alert("오류", "탈퇴에 실패했어요. 잠시 후 다시 시도해주세요.");
+              Alert.alert(
+                "오류",
+                "탈퇴에 실패했어요. 잠시 후 다시 시도해주세요.",
+              );
             }
           },
         },
@@ -141,9 +185,16 @@ export default function ProfileScreen() {
           Platform.OS === "web" ? ({ overflow: "auto" } as any) : null,
         ]}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingTop: rs(6), paddingBottom: rs(108), gap: rs(14) }}
+        contentContainerStyle={{
+          paddingTop: rs(6),
+          paddingBottom: rs(108),
+          gap: rs(14),
+        }}
         refreshControl={
-          <RefreshControl refreshing={profileRefreshing} onRefresh={onRefreshProfile} />
+          <RefreshControl
+            refreshing={profileRefreshing}
+            onRefresh={onRefreshProfile}
+          />
         }
       >
         {/* Identity + level, integrated as one row instead of two stacked
@@ -154,21 +205,63 @@ export default function ProfileScreen() {
           <Glass
             tone={glass.white}
             radius={rs(20)}
-            style={{ padding: rs(16), flexDirection: "row", gap: rs(13), borderWidth: 1, borderColor: glass.border }}
+            style={{
+              padding: rs(16),
+              flexDirection: "row",
+              gap: rs(13),
+              borderWidth: 1,
+              borderColor: glass.border,
+            }}
           >
-            <Glass tone={glass.gray} radius={rs(23)} style={{ width: rs(46), height: rs(46), alignItems: "center", justifyContent: "center" }}>
+            <Glass
+              tone={glass.gray}
+              radius={rs(23)}
+              style={{
+                width: rs(46),
+                height: rs(46),
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
               <MongleMascot size={34} />
             </Glass>
             <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" }}>
-                <Text className="font-bold" style={{ fontSize: rs(15), color: glass.ink }}>{nickname}</Text>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "baseline",
+                  justifyContent: "space-between",
+                }}
+              >
+                <Text
+                  className="font-bold"
+                  style={{ fontSize: rs(15), color: glass.ink }}
+                >
+                  {nickname}
+                </Text>
                 <Text style={{ fontSize: rs(10), color: glass.subMuted }}>
                   {toNextLevel > 0 ? `다음까지 ${toNextLevel}회` : "최고 레벨"}
                 </Text>
               </View>
-              <Text style={{ fontSize: rs(10.5), color: glass.sub, marginTop: 1 }}>{levelTitle} · {daysActive}일째 · Lv.{level}</Text>
-              <View style={{ marginTop: rs(9), height: rs(5), borderRadius: rs(2.5), backgroundColor: "rgba(60,68,64,0.12)", overflow: "hidden" }}>
-                <Glass tone={glass.blue} radius={rs(2.5)} style={{ width: `${levelProgressPct}%`, height: "100%" }} />
+              <Text
+                style={{ fontSize: rs(10.5), color: glass.sub, marginTop: 1 }}
+              >
+                {levelTitle} · {daysActive}일째 · Lv.{level}
+              </Text>
+              <View
+                style={{
+                  marginTop: rs(9),
+                  height: rs(5),
+                  borderRadius: rs(2.5),
+                  backgroundColor: "rgba(60,68,64,0.12)",
+                  overflow: "hidden",
+                }}
+              >
+                <Glass
+                  tone={glass.blue}
+                  radius={rs(2.5)}
+                  style={{ width: `${levelProgressPct}%`, height: "100%" }}
+                />
               </View>
             </View>
           </Glass>
@@ -180,23 +273,68 @@ export default function ProfileScreen() {
           <Glass tone={STREAK_TONE} radius={rs(24)} style={{ padding: rs(18) }}>
             <View style={{ alignItems: "center" }}>
               <Ionicons name="flame" size={rs(22)} color="#fff" />
-              <Text className="font-bold" style={{ fontSize: rs(42), color: "#fff", marginTop: rs(2) }}>{streakCurrent}일째</Text>
-              <Text style={{ fontSize: rs(10.5), color: "rgba(255,255,255,0.5)", marginTop: rs(1) }}>연속 관측 · 최장 {streakLongest}일</Text>
+              <Text
+                className="font-bold"
+                style={{ fontSize: rs(42), color: "#fff", marginTop: rs(2) }}
+              >
+                {streakCurrent}일째
+              </Text>
+              <Text
+                style={{
+                  fontSize: rs(10.5),
+                  color: "rgba(255,255,255,0.5)",
+                  marginTop: rs(1),
+                }}
+              >
+                연속 관측 · 최장 {streakLongest}일
+              </Text>
             </View>
 
-            <View style={{ flexDirection: "row", gap: rs(5), marginTop: rs(14) }}>
+            <View
+              style={{ flexDirection: "row", gap: rs(5), marginTop: rs(14) }}
+            >
               {WEEK_LABELS.map((label, i) => {
                 const checked = weekChecks[i];
                 return (
-                  <View key={label} style={{ alignItems: "center", gap: rs(4), flex: 1 }}>
+                  <View
+                    key={label}
+                    style={{ alignItems: "center", gap: rs(4), flex: 1 }}
+                  >
                     {checked ? (
-                      <Glass tone={glass.blue} radius={rs(10)} style={{ width: rs(20), height: rs(20), alignItems: "center", justifyContent: "center" }}>
-                        <Ionicons name="checkmark" size={rs(12)} color={glass.ink} />
+                      <Glass
+                        tone={glass.blue}
+                        radius={rs(10)}
+                        style={{
+                          width: rs(20),
+                          height: rs(20),
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <Ionicons
+                          name="checkmark"
+                          size={rs(12)}
+                          color={glass.ink}
+                        />
                       </Glass>
                     ) : (
-                      <View style={{ width: rs(20), height: rs(20), borderRadius: rs(10), backgroundColor: "rgba(255,255,255,0.12)" }} />
+                      <View
+                        style={{
+                          width: rs(20),
+                          height: rs(20),
+                          borderRadius: rs(10),
+                          backgroundColor: "rgba(255,255,255,0.12)",
+                        }}
+                      />
                     )}
-                    <Text style={{ fontSize: rs(9), color: "rgba(255,255,255,0.45)" }}>{label}</Text>
+                    <Text
+                      style={{
+                        fontSize: rs(9),
+                        color: "rgba(255,255,255,0.45)",
+                      }}
+                    >
+                      {label}
+                    </Text>
                   </View>
                 );
               })}
@@ -311,7 +449,12 @@ export default function ProfileScreen() {
               label="피드백 보내기"
               onPress={sendFeedback}
             />
-            <SettingsRow icon="information-circle-outline" label="버전 정보" value="1.0.0" last />
+            <SettingsRow
+              icon="information-circle-outline"
+              label="버전 정보"
+              value="1.0.0"
+              last
+            />
           </Glass>
         </View>
 
@@ -327,8 +470,17 @@ export default function ProfileScreen() {
                 overflow: "hidden",
               }}
             >
-              <SettingsRow icon="log-out-outline" label="로그아웃" onPress={handleLogout} />
-              <SettingsRow icon="trash-outline" label="계정 탈퇴" onPress={handleWithdraw} last />
+              <SettingsRow
+                icon="log-out-outline"
+                label="로그아웃"
+                onPress={handleLogout}
+              />
+              <SettingsRow
+                icon="trash-outline"
+                label="계정 탈퇴"
+                onPress={handleWithdraw}
+                last
+              />
             </Glass>
           </View>
         ) : null}
@@ -370,13 +522,22 @@ function SettingsRow({
           row) and only grows to fill the row when it's alone (chevron
           rows), same as before. */}
       <Text
-        style={value ? { fontSize: rs(13), color: glass.ink } : { flex: 1, fontSize: rs(13), color: glass.ink }}
+        style={
+          value
+            ? { fontSize: rs(13), color: glass.ink }
+            : { flex: 1, fontSize: rs(13), color: glass.ink }
+        }
       >
         {label}
       </Text>
       {value ? (
         <Text
-          style={{ flex: 1, fontSize: rs(12), color: glass.subMuted, textAlign: "right" }}
+          style={{
+            flex: 1,
+            fontSize: rs(12),
+            color: glass.subMuted,
+            textAlign: "right",
+          }}
           numberOfLines={1}
           ellipsizeMode="tail"
         >
