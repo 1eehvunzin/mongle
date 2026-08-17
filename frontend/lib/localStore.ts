@@ -473,6 +473,22 @@ export async function markMigrationDecided(): Promise<void> {
   await AsyncStorage.setItem(MIGRATED_KEY, "1");
 }
 
+// Called from lib/auth.ts's signOut/withdraw: NICKNAME_KEY doubles as both
+// "genuine local data waiting to be migrated" (hasLocalDataToMigrate) and a
+// same-account display cache (setNickname mirrors it even while signed in),
+// so a stale mirror from the account someone just signed out of would
+// otherwise look exactly like fresh guest data to the very next sign-in —
+// silently offering to migrate account A's nickname onto account B, or
+// permanently starving every later sign-in of its own migration offer since
+// MIGRATED_KEY is a one-shot-per-device flag. Clearing both on the way out
+// resets the device to a clean guest slate: the next signed-out session
+// starts from "구름지기" instead of inheriting whoever was last signed in,
+// and the next sign-in (same account or a different one) gets an accurate
+// read on whatever local data actually accumulated since.
+export async function clearLocalAccountMirror(): Promise<void> {
+  await AsyncStorage.multiRemove([NICKNAME_KEY, MIGRATED_KEY]);
+}
+
 // Runs after the user confirms "로컬 데이터를 연결하시겠습니까?" (see
 // lib/auth.ts's finishSignIn): pushes nickname/catches up to the account,
 // then clears them locally — this is a *transfer*, not a copy, so the

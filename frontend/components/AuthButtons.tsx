@@ -6,6 +6,18 @@ import { rs } from "../constants/scale";
 import { AccountOut } from "../lib/api";
 import { signInWithApple, signInWithKakao } from "../lib/auth";
 
+// react-native-web has no Alert implementation — Alert.alert() silently
+// no-ops there, so a failed web sign-in used to leave the button just
+// looking like it did nothing. window.alert is the web equivalent of the
+// native modal this already shows everywhere else.
+function alertLoginFailed(message: string) {
+  if (Platform.OS === "web") {
+    (globalThis as any).window?.alert(message);
+    return;
+  }
+  Alert.alert("로그인 실패", message);
+}
+
 // Shared between profile.tsx's account settings and nickname.tsx's
 // onboarding step — both just need "render whichever sign-in buttons apply
 // and hand back the resulting account" without re-implementing either
@@ -31,7 +43,7 @@ export default function AuthButtons({
       onSignedIn(await signInWithApple());
     } catch (e: any) {
       if (e.code === "ERR_REQUEST_CANCELED") return;
-      Alert.alert("로그인 실패", "Apple 로그인에 실패했어요. 다시 시도해주세요.");
+      alertLoginFailed("Apple 로그인에 실패했어요. 다시 시도해주세요.");
     }
   };
 
@@ -42,7 +54,7 @@ export default function AuthButtons({
       // The native SDK's own cancel reason reliably includes this word —
       // there's no single stable error code across its iOS/Android bridges.
       if (typeof e?.message === "string" && /cancel/i.test(e.message)) return;
-      Alert.alert("로그인 실패", "카카오 로그인에 실패했어요. 다시 시도해주세요.");
+      alertLoginFailed("카카오 로그인에 실패했어요. 다시 시도해주세요.");
     }
   };
 
