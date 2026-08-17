@@ -15,6 +15,10 @@ export default function AuthButtons({
 }: {
   onSignedIn: (info: AccountOut) => void;
 }) {
+  // Native Apple button only exists on iOS; web gets its own button below
+  // (Apple JS SDK popup — see lib/auth.ts's signInWithAppleWeb) since
+  // expo-apple-authentication's component doesn't render there at all.
+  // Android has neither.
   const [appleAvailable, setAppleAvailable] = useState(false);
 
   useEffect(() => {
@@ -44,7 +48,7 @@ export default function AuthButtons({
 
   return (
     <View style={{ gap: rs(8) }}>
-      {appleAvailable ? (
+      {Platform.OS === "ios" && appleAvailable ? (
         <AppleAuthentication.AppleAuthenticationButton
           buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
           buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
@@ -52,6 +56,24 @@ export default function AuthButtons({
           style={{ width: "100%", height: rs(46) }}
           onPress={handleAppleSignIn}
         />
+      ) : Platform.OS === "web" ? (
+        <Pressable
+          onPress={handleAppleSignIn}
+          style={{
+            height: rs(46),
+            borderRadius: rs(12),
+            backgroundColor: "#000000",
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: rs(8),
+          }}
+        >
+          <Ionicons name="logo-apple" size={rs(18)} color="#FFFFFF" />
+          <Text style={{ fontSize: rs(14), fontWeight: "700", color: "#FFFFFF" }}>
+            Apple로 로그인
+          </Text>
+        </Pressable>
       ) : null}
       <Pressable
         onPress={handleKakaoSignIn}

@@ -3,13 +3,12 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import MongleMascot from "../components/MongleMascot";
 import Glass from "../components/Glass";
-import AuthButtons from "../components/AuthButtons";
 import { glass } from "../constants/aquaTheme";
 import { onboardingState } from "../constants/onboarding";
 import { rs } from "../constants/scale";
-import { setNickname as saveNickname } from "../lib/localStore";
+import { getLoginOnboardingSeen, setNickname as saveNickname } from "../lib/localStore";
 import { session } from "../lib/session";
-import { AccountOut } from "../lib/api";
+import { account } from "../lib/auth";
 
 const MAX_LEN = 12;
 
@@ -20,23 +19,25 @@ export default function NicknameScreen() {
   const [nickname, setNickname] = useState("구름지기");
   const disabled = nickname.trim().length < 2;
 
-  const start = () => {
+  const start = async () => {
     onboardingState.nicknameSet = true;
-    router.back();
     const trimmed = nickname.trim();
     session.nickname = trimmed;
     saveNickname(trimmed).catch(() => {
       // best-effort — the session flag above already lets this session
       // move on.
     });
-  };
 
-  // A returning user's account may already carry a nickname from another
-  // device — prefill it rather than making them retype it, but still let
-  // them review/edit and confirm with the same "시작하기" button as anyone
-  // signing in for the first time.
-  const handleSignedIn = (info: AccountOut) => {
-    if (info.nickname) setNickname(info.nickname);
+    // Chain straight into the login step (its own screen — see
+    // login-onboarding.tsx) rather than dumping both asks on one card.
+    // Skipped for anyone already signed in or who's seen it before, so this
+    // never re-appears for a returning user just because they're setting a
+    // new nickname.
+    if (!account.token && !(await getLoginOnboardingSeen())) {
+      router.replace("/login-onboarding");
+    } else {
+      router.back();
+    }
   };
 
   return (
@@ -157,23 +158,6 @@ export default function NicknameScreen() {
               </Text>
             </Glass>
           </Pressable>
-
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              marginTop: rs(16),
-              marginBottom: rs(12),
-              gap: rs(8),
-            }}
-          >
-            <View style={{ flex: 1, height: 1, backgroundColor: glass.border }} />
-            <Text style={{ fontSize: rs(10.5), color: glass.subMuted }}>
-              또는 계정으로 계속하기
-            </Text>
-            <View style={{ flex: 1, height: 1, backgroundColor: glass.border }} />
-          </View>
-          <AuthButtons onSignedIn={handleSignedIn} />
         </Glass>
       </View>
     </View>

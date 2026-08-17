@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import {
   Alert,
+  DevSettings,
   Linking,
   Platform,
   Pressable,
@@ -9,15 +10,14 @@ import {
   Text,
   View,
 } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import MongleMascot from "../../components/MongleMascot";
 import Glass from "../../components/Glass";
-import AuthButtons from "../../components/AuthButtons";
 import { Ionicons } from "@expo/vector-icons";
 import { glass } from "../../constants/aquaTheme";
 import { rs } from "../../constants/scale";
-import { getProfile, ProfileOut } from "../../lib/localStore";
+import { getProfile, ProfileOut, resetAllLocalData } from "../../lib/localStore";
 import { account, ensureAccount, signOut, withdraw } from "../../lib/auth";
 import { AccountOut } from "../../lib/api";
 
@@ -54,13 +54,6 @@ export default function ProfileScreen() {
     }, [loadProfile]),
   );
 
-  const handleSignedIn = (info: AccountOut) => {
-    setAccountInfo(info);
-    // A first-time sign-in may have just migrated local catches/nickname up
-    // to the account — reload so the profile card reflects that immediately.
-    loadProfile();
-  };
-
   const handleLogout = () => {
     Alert.alert("로그아웃", "로그아웃 하시겠어요?", [
       { text: "취소", style: "cancel" },
@@ -91,6 +84,30 @@ export default function ProfileScreen() {
             } catch {
               Alert.alert("오류", "탈퇴에 실패했어요. 잠시 후 다시 시도해주세요.");
             }
+          },
+        },
+      ],
+    );
+  };
+
+  // Dev-only escape hatch: clears the AsyncStorage keys that gate
+  // first-launch flows (nickname, login-onboarding "seen", etc.) so those
+  // screens re-trigger on next load without uninstalling the app. Also
+  // signs out — otherwise a still-valid session token would make
+  // login-onboarding skip itself again anyway.
+  const handleResetLocalData = () => {
+    Alert.alert(
+      "로컬 데이터 초기화",
+      "닉네임/로그인 표시/캐치 등 이 기기에 저장된 데이터가 모두 지워지고 앱이 재시작돼요. 서버 계정 자체는 지워지지 않아요.",
+      [
+        { text: "취소", style: "cancel" },
+        {
+          text: "초기화",
+          style: "destructive",
+          onPress: async () => {
+            await signOut();
+            await resetAllLocalData();
+            DevSettings.reload();
           },
         },
       ],
@@ -290,12 +307,6 @@ export default function ProfileScreen() {
           </Glass>
         </View>
 
-        {!accountInfo ? (
-          <View style={{ marginHorizontal: rs(16) }}>
-            <AuthButtons onSignedIn={handleSignedIn} />
-          </View>
-        ) : null}
-
         <View style={{ marginHorizontal: rs(16) }}>
           <Glass
             tone={glass.white}
@@ -312,7 +323,13 @@ export default function ProfileScreen() {
                 label="연결된 계정"
                 value={accountInfo.email ?? "연결됨"}
               />
-            ) : null}
+            ) : (
+              <SettingsRow
+                icon="log-in-outline"
+                label="로그인하기"
+                onPress={() => router.push("/login-onboarding")}
+              />
+            )}
             <SettingsRow
               icon="chatbubble-ellipses-outline"
               label="피드백 보내기"
@@ -322,7 +339,7 @@ export default function ProfileScreen() {
               icon="information-circle-outline"
               label="버전 정보"
               value="1.0.0"
-              last={!accountInfo}
+              last={!accountInfo && !__DEV__}
             />
             {accountInfo ? (
               <>
@@ -331,9 +348,17 @@ export default function ProfileScreen() {
                   icon="trash-outline"
                   label="계정 탈퇴"
                   onPress={handleWithdraw}
-                  last
+                  last={!__DEV__}
                 />
               </>
+            ) : null}
+            {__DEV__ ? (
+              <SettingsRow
+                icon="refresh-outline"
+                label="로컬 데이터 초기화 (개발용)"
+                onPress={handleResetLocalData}
+                last
+              />
             ) : null}
           </Glass>
         </View>

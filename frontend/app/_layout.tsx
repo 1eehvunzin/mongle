@@ -62,6 +62,10 @@ export default function RootLayout() {
           name="nickname"
           options={{ presentation: "transparentModal", animation: "fade" }}
         />
+        <Stack.Screen
+          name="login-onboarding"
+          options={{ presentation: "transparentModal", animation: "fade" }}
+        />
         <Stack.Screen name="share" />
       </Stack>
     </SafeAreaProvider>

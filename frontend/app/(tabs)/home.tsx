@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Image,
   Pressable,
   RefreshControl,
@@ -23,9 +24,10 @@ import Glass from "../../components/Glass";
 import { glass } from "../../constants/aquaTheme";
 import { onboardingState } from "../../constants/onboarding";
 import { rs } from "../../constants/scale";
-import { getTodaySky, TodaySkyOut } from "../../lib/api";
-import { getHome, HomeOut } from "../../lib/localStore";
+import { getApiBaseUrl, getTodaySky, TodaySkyOut } from "../../lib/api";
+import { getHome, getLoginOnboardingSeen, HomeOut } from "../../lib/localStore";
 import { ensureSession, session } from "../../lib/session";
+import { account, ensureAccount } from "../../lib/auth";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -57,6 +59,12 @@ const SKY_GLASS: Record<
   노을: { top: "#F4D6CC", mid: "#E3A794", rim: "#BC6B54", shadow: "#CB8064" },
 };
 
+// Used while the real reading is unknown (still loading, or failed) —
+// reuses the app's plain neutral tone (glass.gray) rather than any of the 5
+// condition colors above, so it never gets mistaken for an actual (wrong)
+// weather reading.
+const SKY_NEUTRAL = glass.gray;
+
 function formatTodayCaption(date: Date) {
   return `${date.getMonth() + 1}월 ${date.getDate()}일 ${WEEKDAYS[date.getDay()]}요일`;
 }
@@ -80,26 +88,41 @@ export default function HomeScreen() {
     null,
   );
   const [todaySky, setTodaySky] = useState<TodaySkyOut | null>(null);
+  // Separate from todaySky being null so the card can tell "still loading"
+  // apart from "loaded and it's actually 맑음" — collapsing those into one
+  // ?? "맑음" fallback was exactly what made a stuck/failed fetch silently
+  // masquerade as a real (wrong) reading.
+  const [weatherStatus, setWeatherStatus] = useState<"loading" | "error" | "loaded">("loading");
   const spin = useSharedValue(0);
 
-  const condition: ConditionKey = todaySky?.condition ?? "맑음";
-  const sky = SKY_GLASS[condition];
-  const conditionIcon = CONDITION_ICONS[condition];
+  const condition: ConditionKey | null = todaySky?.condition ?? null;
+  const sky = condition ? SKY_GLASS[condition] : SKY_NEUTRAL;
+  const conditionIcon = condition ? CONDITION_ICONS[condition] : "cloud-outline";
 
   // Real device location for the weather card's place chip and the
-  // today-sky lookup — best-effort, same pattern as capture.tsx: a denied
-  // permission or a platform without reverse geocoding (web) just falls
-  // back to a plain label instead of blocking the card.
+  // today-sky lookup. A denied permission or failed lookup used to leave
+  // `coords` null forever with no visible error — loadWeather() would just
+  // silently no-op on every subsequent call, so the card was permanently
+  // stuck showing the "맑음" fallback. Now every failure path here also
+  // marks weatherStatus "error" so the card actually says so.
   useEffect(() => {
     let cancelled = false;
     const timeoutId = setTimeout(() => {
-      if (!cancelled) setPlaceName((prev) => prev ?? "위치 미확인");
+      if (!cancelled && !coords) {
+        console.warn("[home/weather] location fetch timed out after 7s — no coords yet");
+        setPlaceName((prev) => prev ?? "위치 미확인");
+        setWeatherStatus("error");
+      }
     }, 7000);
     (async () => {
       try {
         const perm = await Location.requestForegroundPermissionsAsync();
         if (!perm.granted) {
-          if (!cancelled) setPlaceName("위치 권한 필요");
+          console.warn("[home/weather] location permission not granted:", perm.status);
+          if (!cancelled) {
+            setPlaceName("위치 권한 필요");
+            setWeatherStatus("error");
+          }
           return;
         }
 
@@ -117,12 +140,18 @@ export default function HomeScreen() {
               place?.name ?? place?.district ?? place?.city ?? "현재 위치",
             );
           }
-        } catch {
-          // reverseGeocodeAsync isn't available on web in many browsers.
+        } catch (e) {
+          // reverseGeocodeAsync isn't available on web in many browsers —
+          // logged as info, not a warning, since this is expected there.
+          console.info("[home/weather] reverseGeocodeAsync failed (expected on web):", e);
           if (!cancelled) setPlaceName("현재 위치");
         }
-      } catch {
-        if (!cancelled) setPlaceName("위치 미확인");
+      } catch (e) {
+        console.warn("[home/weather] location fetch failed:", e);
+        if (!cancelled) {
+          setPlaceName("위치 미확인");
+          setWeatherStatus("error");
+        }
       }
     })();
     return () => {
@@ -133,11 +162,22 @@ export default function HomeScreen() {
 
   const loadWeather = useCallback(async () => {
     if (!coords) return;
+    setWeatherStatus("loading");
     try {
       setTodaySky(await getTodaySky(coords.lat, coords.lng));
       setUpdatedAt(new Date());
-    } catch {
-      // best-effort — keep whatever was last loaded, if anything.
+      setWeatherStatus("loaded");
+    } catch (e) {
+      // Most likely culprit in practice: EXPO_PUBLIC_API_URL pointing at a
+      // backend that's unreachable, or one missing OPENWEATHER_API_KEY /
+      // OPENAI_API_KEY server-side (/api/today-sky needs both) — logging
+      // the base URL alongside the error makes that visible immediately
+      // instead of just "정보 없음" on the card.
+      console.warn(
+        `[home/weather] getTodaySky failed (base URL: ${getApiBaseUrl()}):`,
+        e,
+      );
+      setWeatherStatus("error");
     }
   }, [coords]);
 
@@ -161,7 +201,10 @@ export default function HomeScreen() {
 
   const onRefreshHome = async () => {
     setHomeRefreshing(true);
-    await loadHome();
+    // Pull-to-refresh used to only reload the level/streak stats — the
+    // weather card had no way to recover from an error short of the tiny
+    // spin button inside it.
+    await Promise.all([loadHome(), loadWeather()]);
     setHomeRefreshing(false);
   };
 
@@ -182,17 +225,37 @@ export default function HomeScreen() {
   useEffect(() => {
     let cancelled = false;
     const openNicknameModal = () => {
+      // nickname.tsx chains straight into the login-onboarding step itself
+      // once it's done, so this branch doesn't also need to check it.
       if (!cancelled) router.push("/nickname");
+    };
+    // Reached whenever the nickname modal *didn't* open — a returning
+    // device that already has a nickname (from an earlier session, a
+    // reinstall, etc.) still may never have seen the login step, so it
+    // can't ride on the nickname flow to trigger it.
+    const checkLoginOnboarding = async () => {
+      await ensureAccount();
+      if (cancelled || account.token) return;
+      if (await getLoginOnboardingSeen()) return;
+      if (!cancelled) router.push("/login-onboarding");
     };
     ensureSession()
       .then(() => {
         if (session.nickname) onboardingState.nicknameSet = true;
-        if (!onboardingState.nicknameSet) openNicknameModal();
+        if (!onboardingState.nicknameSet) {
+          openNicknameModal();
+        } else {
+          checkLoginOnboarding();
+        }
       })
       .catch(() => {
         // backend unreachable — fall back to whatever this session already
         // knows rather than blocking the home screen indefinitely.
-        if (!onboardingState.nicknameSet) openNicknameModal();
+        if (!onboardingState.nicknameSet) {
+          openNicknameModal();
+        } else {
+          checkLoginOnboarding();
+        }
       });
     return () => {
       cancelled = true;
@@ -284,16 +347,26 @@ export default function HomeScreen() {
                     gap: rs(6),
                   }}
                 >
-                  <Ionicons
-                    name={conditionIcon}
-                    size={rs(13)}
-                    color={glass.ink}
-                  />
+                  {weatherStatus === "loading" ? (
+                    <ActivityIndicator size="small" color={glass.ink} />
+                  ) : (
+                    <Ionicons
+                      name={weatherStatus === "error" ? "alert-circle-outline" : conditionIcon}
+                      size={rs(13)}
+                      color={glass.ink}
+                    />
+                  )}
                   <Text
                     className="font-bold"
                     style={{ fontSize: rs(11), color: glass.ink }}
                   >
-                    {condition} · {placeName ?? "위치 확인 중…"}
+                    {weatherStatus === "loading"
+                      ? "확인 중"
+                      : weatherStatus === "error"
+                        ? "정보 없음"
+                        : condition}
+                    {" · "}
+                    {placeName ?? "위치 확인 중…"}
                   </Text>
                 </View>
               </Glass>
@@ -346,6 +419,7 @@ export default function HomeScreen() {
                     fontSize: rs(36),
                     color: glass.ink,
                     letterSpacing: -1,
+                    opacity: todaySky ? 1 : 0.4,
                   }}
                 >
                   {todaySky ? Math.round(todaySky.temp_c) : "–"}°
@@ -468,11 +542,15 @@ export default function HomeScreen() {
                       flex: 1,
                     }}
                   >
-                    오늘은{" "}
-                    <Text className="font-bold">
-                      {todaySky?.cloud_name ?? "뭉게구름"}
-                    </Text>
-                    이 잘 보이는 날! 찍어서 채워볼까?
+                    {todaySky ? (
+                      <>
+                        오늘은{" "}
+                        <Text className="font-bold">{todaySky.cloud_name}</Text>이 잘
+                        보이는 날! 찍어서 채워볼까?
+                      </>
+                    ) : (
+                      "오늘 하늘엔 어떤 구름이 있을까? 찍어서 채워볼까?"
+                    )}
                   </Text>
                   <Ionicons name="camera" size={rs(16)} color={glass.ink} />
                 </View>

@@ -15,11 +15,21 @@ no species knowledge at all.
 import base64
 import os
 import sqlite3
+import tempfile
 import uuid
 from datetime import datetime, timezone
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "mongle.db")
-UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "uploads")
+import auth
+
+# Same file auth.py's accounts table lives in — see its DB_PATH comment for
+# why this isn't just os.path.dirname(__file__) unconditionally (a
+# read-only serverless bundle dir, Vercel's Python runtime notably).
+DB_PATH = auth.DB_PATH
+UPLOADS_DIR = (
+    os.path.join(tempfile.gettempdir(), "mongle-uploads")
+    if os.getenv("VERCEL")
+    else os.path.join(os.path.dirname(__file__), "uploads")
+)
 
 
 def _db() -> sqlite3.Connection:

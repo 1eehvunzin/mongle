@@ -11,6 +11,7 @@ reuse that unrelated schema.
 
 import os
 import sqlite3
+import tempfile
 import time
 from datetime import datetime, timezone
 
@@ -20,13 +21,30 @@ from fastapi import HTTPException
 
 APPLE_ISSUER = "https://appleid.apple.com"
 APPLE_KEYS_URL = "https://appleid.apple.com/auth/keys"
-APPLE_BUNDLE_ID = os.getenv("APPLE_BUNDLE_ID")
+APPLE_BUNDLE_ID = os.getenv("APPLE_BUNDLE_ID")  # native app (iOS)
+APPLE_SERVICES_ID = os.getenv("APPLE_SERVICES_ID")  # web (Sign in with Apple JS)
 KAKAO_USERINFO_URL = "https://kapi.kakao.com/v2/user/me"
+KAKAO_TOKEN_URL = "https://kauth.kakao.com/oauth/token"
+KAKAO_REST_API_KEY = os.getenv("KAKAO_REST_API_KEY")  # web only — native uses the SDK directly
+KAKAO_REDIRECT_URI = os.getenv("KAKAO_REDIRECT_URI")  # must exactly match what the browser used
 SESSION_JWT_SECRET = os.getenv("SESSION_JWT_SECRET")
 SESSION_TTL_SECONDS = 180 * 24 * 60 * 60  # 180 days — a mobile app session,
 # not a browser one; there's no refresh flow, so this is the whole lifetime.
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "mongle.db")
+# Serverless hosts (Vercel's Python runtime, at least) ship the deployed
+# bundle read-only — only /tmp is writable, and it's wiped between cold
+# starts / not shared across concurrent instances. SQLite still needs
+# *somewhere* it can open for writing, so this falls back to /tmp there
+# rather than crashing on every request the way trying to write into the
+# read-only bundle dir did. This does NOT make accounts/catches durable on
+# such a host — that needs a real hosted DB — it just stops one broken
+# feature from taking the whole app (including unrelated routes like
+# /health and /api/recognize) down with it.
+DB_PATH = (
+    os.path.join(tempfile.gettempdir(), "mongle.db")
+    if os.getenv("VERCEL")
+    else os.path.join(os.path.dirname(__file__), "mongle.db")
+)
 
 
 def _db() -> sqlite3.Connection:
@@ -118,11 +136,22 @@ async def _get_apple_jwks() -> dict:
     return _jwks_cache
 
 
+def _apple_audiences() -> list[str]:
+    # Native Sign in with Apple's identity token carries the app's Bundle ID
+    # as `aud`; the web JS SDK flow carries the separate Services ID
+    # instead. Both are valid depending on which client authenticated.
+    return [a for a in (APPLE_BUNDLE_ID, APPLE_SERVICES_ID) if a]
+
+
 async def verify_apple_identity_token(identity_token: str) -> dict:
     """Validates signature, issuer, audience and expiry; returns the token's
     claims (notably `sub`, the stable per-app Apple user id, and `email`)."""
-    if not APPLE_BUNDLE_ID:
-        raise HTTPException(status_code=500, detail="서버에 APPLE_BUNDLE_ID가 설정되어 있지 않아요.")
+    audiences = _apple_audiences()
+    if not audiences:
+        raise HTTPException(
+            status_code=500,
+            detail="서버에 APPLE_BUNDLE_ID/APPLE_SERVICES_ID가 설정되어 있지 않아요.",
+        )
 
     try:
         header = jwt.get_unverified_header(identity_token)
@@ -146,7 +175,7 @@ async def verify_apple_identity_token(identity_token: str) -> dict:
             identity_token,
             key=public_key,
             algorithms=["RS256"],
-            audience=APPLE_BUNDLE_ID,
+            audience=audiences,
             issuer=APPLE_ISSUER,
         )
     except jwt.InvalidTokenError:
@@ -197,6 +226,44 @@ async def verify_kakao_access_token(access_token: str) -> dict:
     data = resp.json()
     kakao_account = data.get("kakao_account") or {}
     return {"id": str(data["id"]), "email": kakao_account.get("email")}
+
+
+async def exchange_kakao_code(code: str) -> str:
+    """Web-only: the browser redirect flow hands back an authorization
+    code, not an access token directly (that's the native SDK's job) — this
+    is the other half of that exchange, done server-side so the REST API
+    key never ships to the browser bundle. Requires KAKAO_REDIRECT_URI to
+    exactly match the redirect_uri the browser was sent to originally."""
+    if not KAKAO_REST_API_KEY or not KAKAO_REDIRECT_URI:
+        raise HTTPException(
+            status_code=500,
+            detail="서버에 KAKAO_REST_API_KEY/KAKAO_REDIRECT_URI가 설정되어 있지 않아요.",
+        )
+
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.post(
+                KAKAO_TOKEN_URL,
+                data={
+                    "grant_type": "authorization_code",
+                    "client_id": KAKAO_REST_API_KEY,
+                    "redirect_uri": KAKAO_REDIRECT_URI,
+                    "code": code,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded;charset=utf-8"},
+                timeout=10.0,
+            )
+        except httpx.HTTPError:
+            raise HTTPException(status_code=502, detail="카카오 로그인 확인에 실패했어요.")
+
+    data = resp.json()
+    access_token = data.get("access_token")
+    if not access_token:
+        raise HTTPException(
+            status_code=401,
+            detail={"error": "카카오 로그인 코드가 올바르지 않아요.", "detail": data},
+        )
+    return access_token
 
 
 def get_account(account_id: int) -> sqlite3.Row | None:

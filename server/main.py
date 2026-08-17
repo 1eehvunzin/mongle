@@ -48,9 +48,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-auth.init_db()
-catches.init_db()
-app.mount("/uploads", StaticFiles(directory=catches.UPLOADS_DIR), name="uploads")
+# Best-effort: a failure here (e.g. an unwritable filesystem this
+# session's /tmp fallback in auth.py/catches.py didn't anticipate) must not
+# crash the whole module — that previously took completely unrelated routes
+# like /health and /api/recognize down with it on every single request.
+try:
+    auth.init_db()
+    catches.init_db()
+    app.mount("/uploads", StaticFiles(directory=catches.UPLOADS_DIR), name="uploads")
+except Exception as e:
+    print(f"[startup] accounts/catches init failed, those features will 500: {e}")
 
 
 def current_account_id(authorization: str | None = Header(default=None)) -> int:
@@ -91,12 +98,23 @@ async def apple_sign_in(payload: AppleSignInRequest):
 
 
 class KakaoSignInRequest(BaseModel):
-    access_token: str
+    # Native (app already has an access token from the SDK) sends
+    # access_token; web (redirect flow only ever gets an authorization
+    # code) sends code instead — exactly one of the two.
+    access_token: str | None = None
+    code: str | None = None
 
 
 @app.post("/api/auth/kakao")
 async def kakao_sign_in(payload: KakaoSignInRequest):
-    claims = await auth.verify_kakao_access_token(payload.access_token)
+    if payload.code:
+        access_token = await auth.exchange_kakao_code(payload.code)
+    elif payload.access_token:
+        access_token = payload.access_token
+    else:
+        raise HTTPException(status_code=400, detail="access_token 또는 code가 필요해요.")
+
+    claims = await auth.verify_kakao_access_token(access_token)
     account = auth.get_or_create_account("kakao", claims["id"], claims.get("email"))
     token = auth.create_session_token(account["id"])
     return {"token": token, "account": auth.account_to_out(account)}

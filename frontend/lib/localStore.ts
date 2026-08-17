@@ -32,6 +32,7 @@ const NICKNAME_KEY = "mongle.nickname";
 const CONSENT_KEY = "mongle.consentGranted";
 const FIRST_LAUNCH_KEY = "mongle.firstLaunchAt";
 const NEXT_ID_KEY = "mongle.nextCatchId";
+const LOGIN_ONBOARDING_SEEN_KEY = "mongle.loginOnboardingSeen";
 
 type StoredCatch = {
   id: number;
@@ -272,6 +273,18 @@ export async function setConsent(granted: boolean): Promise<void> {
   await AsyncStorage.setItem(CONSENT_KEY, granted ? "1" : "0");
 }
 
+// Gates login-onboarding.tsx independently of onboardingState.nicknameSet —
+// a device that already has a nickname (an earlier session, a reinstall
+// that restored AsyncStorage, etc.) still hasn't necessarily seen the login
+// step, so it can't ride on the same one-time flag.
+export async function getLoginOnboardingSeen(): Promise<boolean> {
+  return (await AsyncStorage.getItem(LOGIN_ONBOARDING_SEEN_KEY)) === "1";
+}
+
+export async function setLoginOnboardingSeen(): Promise<void> {
+  await AsyncStorage.setItem(LOGIN_ONBOARDING_SEEN_KEY, "1");
+}
+
 async function getFirstLaunchAt(): Promise<Date> {
   const raw = await AsyncStorage.getItem(FIRST_LAUNCH_KEY);
   if (raw) return new Date(raw);
@@ -483,4 +496,22 @@ export async function migrateLocalDataToServer(token: string): Promise<void> {
   }
 
   await AsyncStorage.setItem(MIGRATED_KEY, "1");
+}
+
+// Dev-only escape hatch (see profile.tsx's __DEV__-gated settings row) —
+// wipes every AsyncStorage key this file owns (nickname, consent, catches,
+// the onboarding/migration flags) so a device that already has local state
+// can re-trigger first-launch flows like login-onboarding.tsx without
+// uninstalling the app. Does NOT touch the server account itself — sign out
+// separately if the point is testing a clean signed-out state too.
+export async function resetAllLocalData(): Promise<void> {
+  await AsyncStorage.multiRemove([
+    CATCHES_KEY,
+    NICKNAME_KEY,
+    CONSENT_KEY,
+    FIRST_LAUNCH_KEY,
+    NEXT_ID_KEY,
+    LOGIN_ONBOARDING_SEEN_KEY,
+    MIGRATED_KEY,
+  ]);
 }

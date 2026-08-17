@@ -83,6 +83,17 @@ export function kakaoSignIn(accessToken: string) {
   });
 }
 
+// Web only — the browser redirect flow only ever gets an authorization
+// code (native gets an access token straight from the SDK instead); the
+// server does the code→token exchange itself (see auth.py's
+// exchange_kakao_code) so the REST API key never ships to the browser.
+export function kakaoSignInWithCode(code: string) {
+  return apiFetch<{ token: string; account: AccountOut }>("/api/auth/kakao", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
+
 function authHeader(token: string): HeadersInit {
   return { Authorization: `Bearer ${token}` };
 }
