@@ -455,25 +455,44 @@ async function photoUriToBase64(uri: string): Promise<string | null> {
   }
 }
 
-// Runs once, right after a device's first successful sign-in (see
-// lib/auth.ts): pushes whatever nickname/catches already exist locally up
-// to the account, so signing in doesn't make pre-existing on-device data
-// disappear from the feed. Guarded by MIGRATED_KEY so a later logout/login
-// on the same device never re-uploads and duplicates catches — there's no
-// server-side idempotency key to dedupe on otherwise.
-export async function migrateLocalDataToServer(token: string): Promise<void> {
-  if (await AsyncStorage.getItem(MIGRATED_KEY)) return;
+// Checked before ever prompting "로컬 데이터를 연결하시겠습니까?" (see
+// lib/auth.ts's finishSignIn) — false once MIGRATED_KEY is set, whether
+// migration actually ran or the user declined it, so that decision is only
+// ever asked once per device.
+export async function hasLocalDataToMigrate(): Promise<boolean> {
+  if (await AsyncStorage.getItem(MIGRATED_KEY)) return false;
+  const nickname = await AsyncStorage.getItem(NICKNAME_KEY);
+  if (nickname) return true;
+  const catches = await readCatches();
+  return catches.length > 0;
+}
 
+// Records that the migration prompt was answered (either way) so it never
+// asks again on this device.
+export async function markMigrationDecided(): Promise<void> {
+  await AsyncStorage.setItem(MIGRATED_KEY, "1");
+}
+
+// Runs after the user confirms "로컬 데이터를 연결하시겠습니까?" (see
+// lib/auth.ts's finishSignIn): pushes nickname/catches up to the account,
+// then clears them locally — this is a *transfer*, not a copy, so the
+// device doesn't end up with the same data live in two places. Only
+// removes what actually made it to the server; anything that fails to
+// upload (network blip, bad photo) is left in place rather than lost.
+export async function migrateLocalDataToServer(token: string): Promise<void> {
   const localNickname = await AsyncStorage.getItem(NICKNAME_KEY);
   if (localNickname) {
     try {
       await updateServerNickname(token, localNickname);
+      await AsyncStorage.removeItem(NICKNAME_KEY);
     } catch {
-      // best-effort — worst case the nickname just needs re-entering.
+      // best-effort — worst case the nickname just needs re-entering, and
+      // it stays put locally so it isn't lost either way.
     }
   }
 
   const localCatches = await readCatches();
+  const remaining: StoredCatch[] = [];
   for (const c of localCatches) {
     try {
       await createServerCatch(token, {
@@ -489,11 +508,19 @@ export async function migrateLocalDataToServer(token: string): Promise<void> {
         weather_condition: c.weatherCondition,
         photo_base64: c.photoUri ? await photoUriToBase64(c.photoUri) : null,
       });
+      if (c.photoUri && !c.photoUri.startsWith("data:")) {
+        FileSystem.deleteAsync(c.photoUri, { idempotent: true }).catch(() => {
+          // best-effort — an orphaned local file is harmless, just wasted space.
+        });
+      }
     } catch {
       // best-effort per catch — one bad photo/network blip shouldn't stop
-      // the rest of the migration.
+      // the rest of the migration, but this one stays local since it
+      // never actually made it to the account.
+      remaining.push(c);
     }
   }
+  await writeCatches(remaining);
 
-  await AsyncStorage.setItem(MIGRATED_KEY, "1");
+  await markMigrationDecided();
 }

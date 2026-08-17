@@ -1,4 +1,4 @@
-import { Platform } from "react-native";
+import { Alert, Platform } from "react-native";
 import * as AppleAuthentication from "expo-apple-authentication";
 import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -11,7 +11,7 @@ import {
   kakaoSignInWithCode,
   withdrawAccount,
 } from "./api";
-import { migrateLocalDataToServer } from "./localStore";
+import { hasLocalDataToMigrate, markMigrationDecided, migrateLocalDataToServer } from "./localStore";
 
 const TOKEN_KEY = "mongle.sessionToken";
 

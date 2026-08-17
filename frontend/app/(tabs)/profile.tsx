@@ -316,7 +316,7 @@ export default function ProfileScreen() {
         </View>
 
         {accountInfo ? (
-          <View style={{ marginHorizontal: rs(16), marginTop: rs(14) }}>
+          <View style={{ marginHorizontal: rs(16) }}>
             <Glass
               tone={glass.white}
               radius={rs(16)}
