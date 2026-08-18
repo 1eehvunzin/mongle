@@ -92,7 +92,9 @@ export default function HomeScreen() {
   // apart from "loaded and it's actually 맑음" — collapsing those into one
   // ?? "맑음" fallback was exactly what made a stuck/failed fetch silently
   // masquerade as a real (wrong) reading.
-  const [weatherStatus, setWeatherStatus] = useState<"loading" | "error" | "loaded">("loading");
+  const [weatherStatus, setWeatherStatus] = useState<
+    "loading" | "error" | "loaded"
+  >("loading");
   const spin = useSharedValue(0);
   const kakaoCodeHandled = useRef(false);
 
@@ -113,7 +115,11 @@ export default function HomeScreen() {
       .then(() => router.replace("/home"))
       .catch((error: unknown) => {
         console.error("[kakao/web] sign-in failed", error);
-        window.alert(error instanceof Error ? error.message : "카카오 로그인에 실패했어요.");
+        window.alert(
+          error instanceof Error
+            ? error.message
+            : "카카오 로그인에 실패했어요.",
+        );
         router.replace("/home");
       });
   }, []);
@@ -131,7 +137,9 @@ export default function HomeScreen() {
 
   const condition: ConditionKey | null = todaySky?.condition ?? null;
   const sky = condition ? SKY_GLASS[condition] : SKY_NEUTRAL;
-  const conditionIcon = condition ? CONDITION_ICONS[condition] : "cloud-outline";
+  const conditionIcon = condition
+    ? CONDITION_ICONS[condition]
+    : "cloud-outline";
 
   // Real device location for the weather card's place chip and the
   // today-sky lookup. A denied permission or failed lookup used to leave
@@ -145,7 +153,9 @@ export default function HomeScreen() {
     const timeoutId = setTimeout(() => {
       if (!isMountedRef.current) return;
       timedOut = true;
-      console.warn("[home/weather] location fetch timed out after 12s — no coords yet");
+      console.warn(
+        "[home/weather] location fetch timed out after 12s — no coords yet",
+      );
       setPlaceName((prev) => prev ?? "위치 미확인");
       setWeatherStatus("error");
     }, 12000);
@@ -153,7 +163,10 @@ export default function HomeScreen() {
     try {
       const perm = await Location.requestForegroundPermissionsAsync();
       if (!perm.granted) {
-        console.warn("[home/weather] location permission not granted:", perm.status);
+        console.warn(
+          "[home/weather] location permission not granted:",
+          perm.status,
+        );
         clearTimeout(timeoutId);
         if (isMountedRef.current) {
           setPlaceName("위치 권한 필요");
@@ -178,12 +191,17 @@ export default function HomeScreen() {
           longitude: pos.coords.longitude,
         });
         if (isMountedRef.current) {
-          setPlaceName(place?.name ?? place?.district ?? place?.city ?? "현재 위치");
+          setPlaceName(
+            place?.name ?? place?.district ?? place?.city ?? "현재 위치",
+          );
         }
       } catch (e) {
         // reverseGeocodeAsync isn't available on web in many browsers —
         // logged as info, not a warning, since this is expected there.
-        console.info("[home/weather] reverseGeocodeAsync failed (expected on web):", e);
+        console.info(
+          "[home/weather] reverseGeocodeAsync failed (expected on web):",
+          e,
+        );
         if (isMountedRef.current) setPlaceName("현재 위치");
       }
     } catch (e) {
@@ -226,6 +244,7 @@ export default function HomeScreen() {
 
   const loadHome = useCallback(async () => {
     try {
+      await ensureAccount();
       setHome(await getHome());
     } catch {
       // best-effort — keep whatever was last loaded, if anything.
@@ -270,7 +289,9 @@ export default function HomeScreen() {
       await Promise.all([ensureSession(), ensureAccount()]);
       if (cancelled) return;
 
-      const hasNickname = account.token ? !!account.info?.nickname : !!session.nickname;
+      const hasNickname = account.token
+        ? !!account.info?.nickname
+        : !!session.nickname;
       if (hasNickname) {
         onboardingState.nicknameSet = true;
         return;
@@ -391,7 +412,11 @@ export default function HomeScreen() {
                     <ActivityIndicator size="small" color={glass.ink} />
                   ) : (
                     <Ionicons
-                      name={weatherStatus === "error" ? "alert-circle-outline" : conditionIcon}
+                      name={
+                        weatherStatus === "error"
+                          ? "alert-circle-outline"
+                          : conditionIcon
+                      }
                       size={rs(13)}
                       color={glass.ink}
                     />
@@ -585,8 +610,8 @@ export default function HomeScreen() {
                     {todaySky ? (
                       <>
                         오늘은{" "}
-                        <Text className="font-bold">{todaySky.cloud_name}</Text>이 잘
-                        보이는 날! 찍어서 채워볼까?
+                        <Text className="font-bold">{todaySky.cloud_name}</Text>
+                        이 잘 보이는 날! 찍어서 채워볼까?
                       </>
                     ) : (
                       "오늘 하늘엔 어떤 구름이 있을까? 찍어서 채워볼까?"

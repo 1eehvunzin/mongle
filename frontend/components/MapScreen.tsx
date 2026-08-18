@@ -1,5 +1,7 @@
 import { useCallback, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
+import { CircleMarker, MapContainer, Popup, TileLayer } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
 import { useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -7,21 +9,9 @@ import Glass from "./Glass";
 import { glass } from "../constants/aquaTheme";
 import { rs } from "../constants/scale";
 import { CatchOut, getMapPins } from "../lib/localStore";
+import { ensureAccount } from "../lib/auth";
 
-// Web fallback — react-native-maps has no web target, and Expo Router's
-// file-based routing pulls in every platform-suffixed file under app/
-// regardless of platform (a .native.tsx route file there still broke the
-// web bundle). Per Expo Router's own guidance, platform variants have to
-// live outside app/ as plain components re-exported by the route — see
-// MapScreen.native.tsx for the real MapView version native picks up instead.
-// No real geo projection here (just a decorative scatter), so pins cycle
-// through a handful of fixed canvas positions rather than plotting lat/lng.
-const PIN_POSITIONS = [
-  { top: 70, left: 90 },
-  { top: 130, left: 210 },
-  { top: 40, left: 250 },
-  { top: 190, left: 60 },
-];
+const DEFAULT_CENTER = { lat: 37.565, lng: 126.99 };
 
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -35,9 +25,9 @@ function timeAgo(iso: string): string {
 export default function MapScreen() {
   const [pins, setPins] = useState<CatchOut[]>([]);
   const [loading, setLoading] = useState(true);
-
   const load = useCallback(async () => {
     try {
+      await ensureAccount();
       setPins(await getMapPins());
     } catch {
       // best-effort — keep whatever was last loaded, if anything.
@@ -71,7 +61,9 @@ export default function MapScreen() {
       </View>
 
       {loading ? (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <View
+          style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
+        >
           <ActivityIndicator color={glass.accent} />
         </View>
       ) : pins.length === 0 ? (
@@ -83,68 +75,63 @@ export default function MapScreen() {
             paddingHorizontal: rs(30),
           }}
         >
-          <Text style={{ color: glass.sub, fontSize: rs(13), textAlign: "center" }}>
+          <Text
+            style={{ color: glass.sub, fontSize: rs(13), textAlign: "center" }}
+          >
             아직 위치가 기록된 구름이 없어요.
           </Text>
         </View>
       ) : (
         <>
-          <Glass
-            tone={glass.gray}
-            radius={rs(20)}
+          <View
             style={{
               marginHorizontal: rs(16),
-              height: rs(230),
+              height: rs(300),
+              borderRadius: rs(20),
+              overflow: "hidden",
               borderWidth: 1,
               borderColor: glass.border,
+              backgroundColor: glass.gray.top,
             }}
           >
-            {pins.slice(0, PIN_POSITIONS.length).map((p, i) => (
-              <View
-                key={p.id}
-                style={{
-                  position: "absolute",
-                  top: rs(PIN_POSITIONS[i % PIN_POSITIONS.length].top),
-                  left: rs(PIN_POSITIONS[i % PIN_POSITIONS.length].left),
-                  alignItems: "center",
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: rs(9),
-                    fontWeight: "700",
-                    color: glass.ink,
-                    backgroundColor: "rgba(255,255,255,0.92)",
-                    borderRadius: rs(8),
-                    paddingHorizontal: rs(6),
-                    paddingVertical: rs(1),
-                  }}
-                >
-                  {p.place_name ?? p.cloud_name}
-                </Text>
-                <Glass
-                  tone={glass.blue}
-                  radius={rs(14)}
-                  style={{
-                    width: rs(28),
-                    height: rs(28),
-                    alignItems: "center",
-                    justifyContent: "center",
-                    borderWidth: 2,
-                    borderColor: "#fff",
-                    marginTop: rs(3),
-                    shadowColor: glass.blue.shadow,
-                    shadowOpacity: 0.35,
-                    shadowRadius: rs(5),
-                    shadowOffset: { width: 0, height: rs(2) },
-                    elevation: 3,
-                  }}
-                >
-                  <Ionicons name="location" size={rs(15)} color={glass.ink} />
-                </Glass>
-              </View>
-            ))}
-          </Glass>
+            <MapContainer
+              center={[
+                pins.find((pin) => pin.lat != null && pin.lng != null)?.lat ??
+                  DEFAULT_CENTER.lat,
+                pins.find((pin) => pin.lat != null && pin.lng != null)?.lng ??
+                  DEFAULT_CENTER.lng,
+              ]}
+              zoom={12}
+              style={{ width: "100%", height: "100%" }}
+              scrollWheelZoom
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              {pins
+                .filter((pin) => pin.lat != null && pin.lng != null)
+                .map((pin) => (
+                  <CircleMarker
+                    key={pin.id}
+                    center={[pin.lat as number, pin.lng as number]}
+                    radius={9}
+                    pathOptions={{
+                      color: "#244F5D",
+                      fillColor: "#8FC7D5",
+                      fillOpacity: 0.95,
+                      weight: 3,
+                    }}
+                  >
+                    <Popup>
+                      <strong>{pin.cloud_name}</strong>
+                      <br />
+                      {pin.place_name ?? "위치 기록"}
+                    </Popup>
+                  </CircleMarker>
+                ))}
+            </MapContainer>
+          </View>
 
           <Text
             className="font-semibold"
@@ -205,7 +192,8 @@ export default function MapScreen() {
                       color={glass.subMuted}
                     />
                     <Text style={{ fontSize: rs(10.5), color: glass.subMuted }}>
-                      {p.place_name ?? "위치 정보 없음"} · {timeAgo(p.captured_at)}
+                      {p.place_name ?? "위치 정보 없음"} ·{" "}
+                      {timeAgo(p.captured_at)}
                     </Text>
                   </View>
                 </View>

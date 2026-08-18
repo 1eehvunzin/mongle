@@ -69,6 +69,30 @@ async def health():
     return {"ok": True}
 
 
+class LogCrashRequest(BaseModel):
+    message: str
+    stack: str | None = None
+    isFatal: bool | None = None
+    buildVersion: str | None = None
+    timestamp: str | None = None
+
+
+# Temporary diagnostic endpoint: the production iOS build aborts within ~3s
+# of launch on every TestFlight build so far, with no JS stack in the native
+# crash log (Hermes doesn't surface one). The client persists the error to
+# AsyncStorage from a global JS error handler (see frontend/lib/crashLog.ts)
+# and uploads it here on the next launch, since there's usually no time for
+# a network call to complete before the abort. Printed, not stored, so it
+# just shows up in Vercel's function logs.
+@app.post("/api/log-crash")
+async def log_crash(payload: LogCrashRequest):
+    print(
+        f"[client-crash] fatal={payload.isFatal} build={payload.buildVersion} "
+        f"at={payload.timestamp}\n{payload.message}\n{payload.stack}"
+    )
+    return {"ok": True}
+
+
 class AppleSignInRequest(BaseModel):
     identity_token: str
     email: str | None = None

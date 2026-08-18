@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import MongleMascot from "../components/MongleMascot";
 import Glass from "../components/Glass";
 import { glass } from "../constants/aquaTheme";
 import { onboardingState } from "../constants/onboarding";
 import { rs } from "../constants/scale";
-import { setNickname as saveNickname } from "../lib/localStore";
+import { getNickname, setNickname as saveNickname } from "../lib/localStore";
 import { session } from "../lib/session";
 
 const MAX_LEN = 12;
@@ -19,12 +19,26 @@ const MAX_LEN = 12;
 // (skipped, or signed into an account that still has no nickname) — see
 // home.tsx's boot check — so there's nothing left to chain into here.
 export default function NicknameScreen() {
+  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const editing = mode === "edit";
   const [nickname, setNickname] = useState("구름지기");
   const disabled = nickname.trim().length < 2;
 
-  const start = () => {
-    onboardingState.nicknameSet = true;
+  useEffect(() => {
+    if (!editing) return;
+    getNickname().then((current) => {
+      if (current) setNickname(current);
+    });
+  }, [editing]);
+
+  const start = async () => {
     const trimmed = nickname.trim();
+    if (editing) {
+      await saveNickname(trimmed);
+      router.back();
+      return;
+    }
+    onboardingState.nicknameSet = true;
     session.nickname = trimmed;
     saveNickname(trimmed).catch(() => {
       // best-effort — the session flag above already lets this session
@@ -44,7 +58,7 @@ export default function NicknameScreen() {
           bottom: 0,
           backgroundColor: "rgba(28,32,30,0.5)",
         }}
-        onPress={start}
+        onPress={editing ? () => router.back() : start}
       />
 
       <View
@@ -67,7 +81,7 @@ export default function NicknameScreen() {
               marginTop: rs(14),
             }}
           >
-            어떻게 불러드릴까요?
+            {editing ? "닉네임을 수정할까요?" : "어떻게 불러드릴까요?"}
           </Text>
           <Text
             style={{
@@ -77,7 +91,9 @@ export default function NicknameScreen() {
               marginTop: rs(4),
             }}
           >
-            몽글이가 부를 이름을 알려주세요
+            {editing
+              ? "새로운 닉네임을 입력해주세요"
+              : "몽글이가 부를 이름을 알려주세요"}
           </Text>
 
           {/* Just a text field — a rounded input bar with the counter tucked
@@ -147,7 +163,7 @@ export default function NicknameScreen() {
                 className="font-bold"
                 style={{ fontSize: rs(15), color: glass.ink }}
               >
-                시작하기
+                {editing ? "저장하기" : "시작하기"}
               </Text>
             </Glass>
           </Pressable>

@@ -19,6 +19,7 @@ import Glass from "../../components/Glass";
 import { glass } from "../../constants/aquaTheme";
 import { rs } from "../../constants/scale";
 import { CatchOut, getFeed } from "../../lib/localStore";
+import { ensureAccount } from "../../lib/auth";
 
 // Fallback art for catches saved without a photo — keyed loosely by species
 // so the card still reads as "that kind of cloud" instead of a blank tile.
@@ -35,7 +36,8 @@ function conditionMeta(cond: string | null): {
   if (!cond) return { icon: "cloud-outline", text: null };
   if (cond.includes("노을")) return { icon: "partly-sunny", text: cond };
   if (cond.includes("맑음")) return { icon: "sunny", text: cond };
-  if (cond.includes("조금")) return { icon: "partly-sunny-outline", text: cond };
+  if (cond.includes("조금"))
+    return { icon: "partly-sunny-outline", text: cond };
   return { icon: "cloud-outline", text: cond };
 }
 
@@ -56,6 +58,7 @@ export default function FeedScreen() {
 
   const load = useCallback(async () => {
     try {
+      await ensureAccount();
       setItems(await getFeed());
       setError(false);
     } catch {
@@ -102,7 +105,9 @@ export default function FeedScreen() {
       </View>
 
       {loading ? (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <View
+          style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
+        >
           <ActivityIndicator color={glass.accent} />
         </View>
       ) : error && items.length === 0 ? (
@@ -114,7 +119,9 @@ export default function FeedScreen() {
             paddingHorizontal: rs(30),
           }}
         >
-          <Text style={{ color: glass.sub, fontSize: rs(13), textAlign: "center" }}>
+          <Text
+            style={{ color: glass.sub, fontSize: rs(13), textAlign: "center" }}
+          >
             피드를 불러오지 못했어요
           </Text>
         </View>
@@ -127,7 +134,9 @@ export default function FeedScreen() {
             paddingHorizontal: rs(30),
           }}
         >
-          <Text style={{ color: glass.sub, fontSize: rs(13), textAlign: "center" }}>
+          <Text
+            style={{ color: glass.sub, fontSize: rs(13), textAlign: "center" }}
+          >
             아직 등록된 구름이 없어요.{"\n"}첫 구름을 촬영해보세요!
           </Text>
         </View>
@@ -162,7 +171,8 @@ export default function FeedScreen() {
                   source={
                     photoUrl
                       ? { uri: photoUrl }
-                      : FALLBACK_PHOTOS[f.cloud_name] ?? DEFAULT_FALLBACK_PHOTO
+                      : (FALLBACK_PHOTOS[f.cloud_name] ??
+                        DEFAULT_FALLBACK_PHOTO)
                   }
                   style={{ height: rs(190), position: "relative" }}
                 >
@@ -212,7 +222,9 @@ export default function FeedScreen() {
                         >
                           {cond.text ? `${cond.text} · ` : ""}
                           {f.cloud_name}
-                          {f.temp_c != null ? ` · ${Math.round(f.temp_c)}°` : ""}
+                          {f.temp_c != null
+                            ? ` · ${Math.round(f.temp_c)}°`
+                            : ""}
                         </Text>
                       </View>
                     </Glass>
@@ -268,8 +280,11 @@ export default function FeedScreen() {
                         size={rs(10)}
                         color={glass.subMuted}
                       />
-                      <Text style={{ fontSize: rs(10.5), color: glass.subMuted }}>
-                        {f.place_name ?? "위치 정보 없음"} · {timeAgo(f.captured_at)}
+                      <Text
+                        style={{ fontSize: rs(10.5), color: glass.subMuted }}
+                      >
+                        {f.place_name ?? "위치 정보 없음"} ·{" "}
+                        {timeAgo(f.captured_at)}
                       </Text>
                     </View>
                   </View>

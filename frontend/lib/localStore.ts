@@ -146,7 +146,8 @@ async function toOut(c: StoredCatch): Promise<CatchOut> {
 async function photosDir(): Promise<string> {
   const dir = `${FileSystem.documentDirectory}catches/`;
   const info = await FileSystem.getInfoAsync(dir);
-  if (!info.exists) await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+  if (!info.exists)
+    await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
   return dir;
 }
 
@@ -157,7 +158,9 @@ async function savePhotoBase64(base64: string): Promise<string> {
   // its base64 field (unlike native, which returns the raw payload), so
   // only wrap it if it isn't one already.
   if (Platform.OS === "web") {
-    return base64.startsWith("data:") ? base64 : `data:image/jpeg;base64,${base64}`;
+    return base64.startsWith("data:")
+      ? base64
+      : `data:image/jpeg;base64,${base64}`;
   }
 
   const uri = `${await photosDir()}${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`;
@@ -213,7 +216,9 @@ export async function createCatch(input: CreateCatchInput): Promise<CatchOut> {
     lng: input.lng ?? null,
     tempC: input.temp_c ?? null,
     weatherCondition: input.weather_condition ?? null,
-    photoUri: input.photo_base64 ? await savePhotoBase64(input.photo_base64) : null,
+    photoUri: input.photo_base64
+      ? await savePhotoBase64(input.photo_base64)
+      : null,
     capturedAt: new Date().toISOString(),
   };
   catches.push(stored);
@@ -362,7 +367,8 @@ function weekChecks(dateKeys: string[]): boolean[] {
 function mostObserved(catches: StoredCatch[]): string | null {
   if (catches.length === 0) return null;
   const counts = new Map<string, number>();
-  for (const c of catches) counts.set(c.cloudName, (counts.get(c.cloudName) ?? 0) + 1);
+  for (const c of catches)
+    counts.set(c.cloudName, (counts.get(c.cloudName) ?? 0) + 1);
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
 }
 
@@ -431,11 +437,16 @@ export async function getHome(): Promise<HomeOut> {
 // Dex "best finish ever pulled" per species, kept around for anything that
 // wants a Pokédex-style summary later even though the dex screen itself was
 // dropped (see TabBar.tsx history) — not currently rendered anywhere.
-export async function getBestFinishBySpecies(): Promise<Record<string, CloudTier>> {
+export async function getBestFinishBySpecies(): Promise<
+  Record<string, CloudTier>
+> {
   const catches = await readCatches();
   const bySpecies = new Map<string, CloudTier[]>();
   for (const c of catches) {
-    bySpecies.set(c.cloudName, [...(bySpecies.get(c.cloudName) ?? []), c.finish]);
+    bySpecies.set(c.cloudName, [
+      ...(bySpecies.get(c.cloudName) ?? []),
+      c.finish,
+    ]);
   }
   const result: Record<string, CloudTier> = {};
   for (const [name, finishes] of bySpecies) result[name] = bestFinish(finishes);
@@ -495,15 +506,17 @@ export async function clearLocalAccountMirror(): Promise<void> {
 // device doesn't end up with the same data live in two places. Only
 // removes what actually made it to the server; anything that fails to
 // upload (network blip, bad photo) is left in place rather than lost.
-export async function migrateLocalDataToServer(token: string): Promise<void> {
+export async function migrateLocalDataToServer(
+  token: string,
+): Promise<{ failed: number }> {
   const localNickname = await AsyncStorage.getItem(NICKNAME_KEY);
+  let nicknameFailed = false;
   if (localNickname) {
     try {
       await updateServerNickname(token, localNickname);
       await AsyncStorage.removeItem(NICKNAME_KEY);
     } catch {
-      // best-effort — worst case the nickname just needs re-entering, and
-      // it stays put locally so it isn't lost either way.
+      nicknameFailed = true;
     }
   }
 
@@ -538,5 +551,7 @@ export async function migrateLocalDataToServer(token: string): Promise<void> {
   }
   await writeCatches(remaining);
 
-  await markMigrationDecided();
+  const failed = remaining.length + (nicknameFailed ? 1 : 0);
+  if (failed === 0) await markMigrationDecided();
+  return { failed };
 }

@@ -202,69 +202,73 @@ export default function ProfileScreen() {
             everything about "where this user stands" flows in the column
             beside it. */}
         <View style={{ marginHorizontal: rs(16) }}>
-          <Glass
-            tone={glass.white}
-            radius={rs(20)}
-            style={{
-              padding: rs(16),
-              flexDirection: "row",
-              gap: rs(13),
-              borderWidth: 1,
-              borderColor: glass.border,
-            }}
-          >
+          <Pressable onPress={() => router.push("/nickname?mode=edit")}>
             <Glass
-              tone={glass.gray}
-              radius={rs(23)}
+              tone={glass.white}
+              radius={rs(20)}
               style={{
-                width: rs(46),
-                height: rs(46),
-                alignItems: "center",
-                justifyContent: "center",
+                padding: rs(16),
+                flexDirection: "row",
+                gap: rs(13),
+                borderWidth: 1,
+                borderColor: glass.border,
               }}
             >
-              <MongleMascot size={34} />
-            </Glass>
-            <View style={{ flex: 1 }}>
-              <View
+              <Glass
+                tone={glass.gray}
+                radius={rs(23)}
                 style={{
-                  flexDirection: "row",
-                  alignItems: "baseline",
-                  justifyContent: "space-between",
+                  width: rs(46),
+                  height: rs(46),
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
-                <Text
-                  className="font-bold"
-                  style={{ fontSize: rs(15), color: glass.ink }}
+                <MongleMascot size={34} />
+              </Glass>
+              <View style={{ flex: 1 }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "baseline",
+                    justifyContent: "space-between",
+                  }}
                 >
-                  {nickname}
+                  <Text
+                    className="font-bold"
+                    style={{ fontSize: rs(15), color: glass.ink }}
+                  >
+                    {nickname}
+                  </Text>
+                  <Text style={{ fontSize: rs(10), color: glass.subMuted }}>
+                    {toNextLevel > 0
+                      ? `다음까지 ${toNextLevel}회`
+                      : "최고 레벨"}
+                  </Text>
+                </View>
+                <Text
+                  style={{ fontSize: rs(10.5), color: glass.sub, marginTop: 1 }}
+                >
+                  {levelTitle} · {daysActive}일째 · Lv.{level}
                 </Text>
-                <Text style={{ fontSize: rs(10), color: glass.subMuted }}>
-                  {toNextLevel > 0 ? `다음까지 ${toNextLevel}회` : "최고 레벨"}
-                </Text>
+                <View
+                  style={{
+                    marginTop: rs(9),
+                    height: rs(5),
+                    borderRadius: rs(2.5),
+                    backgroundColor: "rgba(60,68,64,0.12)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <Glass
+                    tone={glass.blue}
+                    radius={rs(2.5)}
+                    style={{ width: `${levelProgressPct}%`, height: "100%" }}
+                  />
+                </View>
               </View>
-              <Text
-                style={{ fontSize: rs(10.5), color: glass.sub, marginTop: 1 }}
-              >
-                {levelTitle} · {daysActive}일째 · Lv.{level}
-              </Text>
-              <View
-                style={{
-                  marginTop: rs(9),
-                  height: rs(5),
-                  borderRadius: rs(2.5),
-                  backgroundColor: "rgba(60,68,64,0.12)",
-                  overflow: "hidden",
-                }}
-              >
-                <Glass
-                  tone={glass.blue}
-                  radius={rs(2.5)}
-                  style={{ width: `${levelProgressPct}%`, height: "100%" }}
-                />
-              </View>
-            </View>
-          </Glass>
+            </Glass>
+          </Pressable>
         </View>
 
         {/* Streak — its own card, deep sky-blue instead of near-black

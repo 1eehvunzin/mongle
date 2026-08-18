@@ -7,9 +7,19 @@ import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
 import { ensureSession, session } from "../lib/session";
 import { ensureAccount } from "../lib/auth";
-import { seedDevCatchesOnce } from "../lib/devSeed";
+import { flushPendingCrash, recordCrash } from "../lib/crashLog";
 import { captureConsent } from "../constants/consent";
 import { onboardingState } from "../constants/onboarding";
+
+// Installed at module scope (not inside the component) so it's active as
+// early as possible — see lib/crashLog.ts for why this exists.
+const globalAny = global as any;
+const defaultErrorHandler = globalAny.ErrorUtils?.getGlobalHandler?.();
+globalAny.ErrorUtils?.setGlobalHandler?.((error: unknown, isFatal?: boolean) => {
+  recordCrash(error, !!isFatal).finally(() => {
+    defaultErrorHandler?.(error, isFatal);
+  });
+});
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -37,9 +47,14 @@ export default function RootLayout() {
     ensureAccount().catch(() => {
       // best-effort — screens fall back to signed-out state.
     });
-    seedDevCatchesOnce().catch(() => {
-      // best-effort dev-only seed — a failure here shouldn't block the app.
-    });
+    if (__DEV__) {
+      import("../lib/devSeed").then(({ seedDevCatchesOnce }) => {
+        seedDevCatchesOnce().catch(() => {
+          // best-effort dev-only seed — never block app startup.
+        });
+      });
+    }
+    flushPendingCrash();
   }, []);
 
   if (!fontsLoaded) {

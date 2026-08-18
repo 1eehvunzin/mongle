@@ -11,11 +11,6 @@ import {
   kakaoSignInWithCode,
   withdrawAccount,
 } from "./api";
-import {
-  hasLocalDataToMigrate,
-  markMigrationDecided,
-  migrateLocalDataToServer,
-} from "./localStore";
 
 const TOKEN_KEY = "mongle.sessionToken";
 
@@ -226,9 +221,22 @@ async function finishSignIn(
   token: string,
   fallback: AccountOut,
 ): Promise<AccountOut> {
+  const {
+    hasLocalDataToMigrate,
+    markMigrationDecided,
+    migrateLocalDataToServer,
+  } = await import("./localStore");
   if (await hasLocalDataToMigrate()) {
     if (await confirmMigration()) {
-      await migrateLocalDataToServer(token);
+      const result = await migrateLocalDataToServer(token);
+      if (result.failed > 0) {
+        const message = `일부 로컬 데이터를 옮기지 못했어요 (${result.failed}건). 다음 로그인 때 다시 시도할게요.`;
+        if (Platform.OS === "web") {
+          (globalThis as any).window?.alert(message);
+        } else {
+          Alert.alert("일부 데이터 이전 실패", message);
+        }
+      }
     } else {
       await markMigrationDecided();
     }
