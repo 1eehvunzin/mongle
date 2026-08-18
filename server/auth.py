@@ -10,14 +10,14 @@ reuse that unrelated schema.
 """
 
 import os
-import sqlite3
-import tempfile
 import time
 from datetime import datetime, timezone
 
 import httpx
 import jwt
 from fastapi import HTTPException
+
+import supabase_store
 
 APPLE_ISSUER = "https://appleid.apple.com"
 APPLE_KEYS_URL = "https://appleid.apple.com/auth/keys"
@@ -31,90 +31,8 @@ SESSION_JWT_SECRET = os.getenv("SESSION_JWT_SECRET")
 SESSION_TTL_SECONDS = 180 * 24 * 60 * 60  # 180 days — a mobile app session,
 # not a browser one; there's no refresh flow, so this is the whole lifetime.
 
-# Serverless hosts (Vercel's Python runtime, at least) ship the deployed
-# bundle read-only — only /tmp is writable, and it's wiped between cold
-# starts / not shared across concurrent instances. SQLite still needs
-# *somewhere* it can open for writing, so this falls back to /tmp there
-# rather than crashing on every request the way trying to write into the
-# read-only bundle dir did. This does NOT make accounts/catches durable on
-# such a host — that needs a real hosted DB — it just stops one broken
-# feature from taking the whole app (including unrelated routes like
-# /health and /api/recognize) down with it.
-DB_PATH = (
-    os.path.join(tempfile.gettempdir(), "mongle.db")
-    if os.getenv("VERCEL")
-    else os.path.join(os.path.dirname(__file__), "mongle.db")
-)
-
-
-def _db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
-
-
 def init_db() -> None:
-    with _db() as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS accounts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                apple_sub TEXT UNIQUE,
-                kakao_id TEXT UNIQUE,
-                email TEXT,
-                nickname TEXT,
-                created_at TEXT NOT NULL
-            )
-            """
-        )
-        # accounts already existed (created by an earlier auth.py revision)
-        # without these columns — ALTER errors if re-run once added, so only
-        # add each the first time.
-        columns = {row["name"]: row for row in conn.execute("PRAGMA table_info(accounts)")}
-        if "nickname" not in columns:
-            conn.execute("ALTER TABLE accounts ADD COLUMN nickname TEXT")
-        if "kakao_id" not in columns:
-            # SQLite can't ALTER ADD a UNIQUE column directly — add it plain,
-            # then enforce uniqueness via an index (also covers the fresh
-            # CREATE TABLE path, where the inline UNIQUE already did this,
-            # but IF NOT EXISTS makes re-running harmless).
-            conn.execute("ALTER TABLE accounts ADD COLUMN kakao_id TEXT")
-        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_kakao_id ON accounts (kakao_id)")
-        # An even earlier revision had apple_sub NOT NULL, which blocks
-        # Kakao-only accounts — SQLite can't drop a column constraint
-        # in-place, so rebuild the table instead (empty/dev-only db in
-        # practice, but this preserves any rows either way).
-        if columns.get("apple_sub") and columns["apple_sub"]["notnull"]:
-            # Without this, SQLite rewrites *other* tables' REFERENCES
-            # clauses to follow the rename below (catches.py's
-            # account_catches says "REFERENCES accounts") — then dropping
-            # accounts_old leaves that FK dangling. With it, other tables'
-            # FK text is left untouched, so it keeps resolving to whichever
-            # table is actually named "accounts" once we're done.
-            conn.execute("PRAGMA legacy_alter_table = ON")
-            conn.execute("ALTER TABLE accounts RENAME TO accounts_old")
-            conn.execute(
-                """
-                CREATE TABLE accounts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    apple_sub TEXT UNIQUE,
-                    kakao_id TEXT UNIQUE,
-                    email TEXT,
-                    nickname TEXT,
-                    created_at TEXT NOT NULL
-                )
-                """
-            )
-            conn.execute(
-                """
-                INSERT INTO accounts (id, apple_sub, kakao_id, email, nickname, created_at)
-                SELECT id, apple_sub, kakao_id, email, nickname, created_at FROM accounts_old
-                """
-            )
-            conn.execute("DROP TABLE accounts_old")
-            conn.execute("PRAGMA legacy_alter_table = OFF")
-        conn.commit()
+    supabase_store.init_db()
 
 
 # Apple rotates its signing keys occasionally; cache the JWKS for a while
@@ -184,26 +102,24 @@ async def verify_apple_identity_token(identity_token: str) -> dict:
     return claims
 
 
-def get_or_create_account(provider: str, external_id: str, email: str | None) -> sqlite3.Row:
+def get_or_create_account(provider: str, external_id: str, email: str | None) -> dict:
     column = "apple_sub" if provider == "apple" else "kakao_id"
-    with _db() as conn:
-        row = conn.execute(f"SELECT * FROM accounts WHERE {column} = ?", (external_id,)).fetchone()
+    with supabase_store.db() as conn:
+        row = conn.execute(f"SELECT * FROM accounts WHERE {column} = %s", (external_id,)).fetchone()
         if row is not None:
             # Apple only sends the email on the very first authorization, and
             # Kakao's email scope may not always be granted — keep whatever
             # we already have unless we're seeing a fresh one.
             if email and email != row["email"]:
-                conn.execute("UPDATE accounts SET email = ? WHERE id = ?", (email, row["id"]))
-                conn.commit()
-                row = conn.execute("SELECT * FROM accounts WHERE id = ?", (row["id"],)).fetchone()
+                conn.execute("UPDATE accounts SET email = %s WHERE id = %s", (email, row["id"]))
+                row = conn.execute("SELECT * FROM accounts WHERE id = %s", (row["id"],)).fetchone()
             return row
 
         cur = conn.execute(
-            f"INSERT INTO accounts ({column}, email, created_at) VALUES (?, ?, ?)",
+            f"INSERT INTO accounts ({column}, email, created_at) VALUES (%s, %s, %s) RETURNING id",
             (external_id, email, datetime.now(timezone.utc).isoformat()),
         )
-        conn.commit()
-        return conn.execute("SELECT * FROM accounts WHERE id = ?", (cur.lastrowid,)).fetchone()
+        return conn.execute("SELECT * FROM accounts WHERE id = %s", (cur.fetchone()["id"],)).fetchone()
 
 
 async def verify_kakao_access_token(access_token: str) -> dict:
@@ -266,22 +182,20 @@ async def exchange_kakao_code(code: str) -> str:
     return access_token
 
 
-def get_account(account_id: int) -> sqlite3.Row | None:
-    with _db() as conn:
-        return conn.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
+def get_account(account_id: int) -> dict | None:
+    with supabase_store.db() as conn:
+        return conn.execute("SELECT * FROM accounts WHERE id = %s", (account_id,)).fetchone()
 
 
 def delete_account(account_id: int) -> None:
-    with _db() as conn:
-        conn.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
-        conn.commit()
+    with supabase_store.db() as conn:
+        conn.execute("DELETE FROM accounts WHERE id = %s", (account_id,))
 
 
-def update_nickname(account_id: int, nickname: str) -> sqlite3.Row:
-    with _db() as conn:
-        conn.execute("UPDATE accounts SET nickname = ? WHERE id = ?", (nickname, account_id))
-        conn.commit()
-        return conn.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
+def update_nickname(account_id: int, nickname: str) -> dict:
+    with supabase_store.db() as conn:
+        conn.execute("UPDATE accounts SET nickname = %s WHERE id = %s", (nickname, account_id))
+        return conn.execute("SELECT * FROM accounts WHERE id = %s", (account_id,)).fetchone()
 
 
 def create_session_token(account_id: int) -> str:
@@ -303,7 +217,7 @@ def decode_session_token(token: str) -> int:
     return int(payload["sub"])
 
 
-def account_to_out(row: sqlite3.Row) -> dict:
+def account_to_out(row: dict) -> dict:
     return {
         "id": row["id"],
         "email": row["email"],

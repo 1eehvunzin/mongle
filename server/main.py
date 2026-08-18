@@ -14,7 +14,6 @@ switches to reading/writing them here instead, under the account's own
 
 import json
 import os
-import shutil
 from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
@@ -28,7 +27,6 @@ load_dotenv()
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from openai import APIStatusError, AsyncOpenAI
 from pydantic import BaseModel
 
@@ -48,16 +46,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Best-effort: a failure here (e.g. an unwritable filesystem this
-# session's /tmp fallback in auth.py/catches.py didn't anticipate) must not
-# crash the whole module — that previously took completely unrelated routes
-# like /health and /api/recognize down with it on every single request.
+# The database schema lives in Supabase and is created idempotently at startup.
 try:
     auth.init_db()
     catches.init_db()
-    app.mount("/uploads", StaticFiles(directory=catches.UPLOADS_DIR), name="uploads")
 except Exception as e:
-    print(f"[startup] accounts/catches init failed, those features will 500: {e}")
+    print(f"[startup] Supabase initialization failed, account features will 500: {e}")
 
 
 def current_account_id(authorization: str | None = Header(default=None)) -> int:
@@ -141,7 +135,6 @@ async def update_me(payload: UpdateNicknameRequest, account_id: int = Depends(cu
 @app.delete("/api/auth/withdraw")
 async def withdraw(account_id: int = Depends(current_account_id)):
     auth.delete_account(account_id)
-    shutil.rmtree(os.path.join(catches.UPLOADS_DIR, str(account_id)), ignore_errors=True)
     return {"ok": True}
 
 

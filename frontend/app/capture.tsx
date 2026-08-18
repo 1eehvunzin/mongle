@@ -169,6 +169,13 @@ export default function CaptureScreen() {
     try {
       const photo = await cameraRef.current.takePictureAsync({
         base64: true,
+        // Web-only: expo-camera's web capture defaults to an uncompressed
+        // PNG at full resolution when imageType isn't set, which can run
+        // several MB as base64 — big enough to blow localStorage's guest
+        // quota or a server request-size limit on register. Native already
+        // captures JPEG by default, so this just brings web in line.
+        imageType: "jpg",
+        quality: 0.7,
       });
       setPhotoUri(photo?.uri ?? null);
       setPhotoBase64(photo?.base64 ?? null);
