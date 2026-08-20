@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Image,
   InteractionManager,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -104,7 +105,7 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (Platform.OS !== "web") return;
     const params = new URLSearchParams(window.location.search);
     const kakaoCode = params.get("code");
     const kakaoError = params.get("error");
