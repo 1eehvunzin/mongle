@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Image } from 'react-native';
+import { Image, InteractionManager } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -21,13 +21,19 @@ export default function MongleMascot({ size = 100, bob = false, duration = 3200,
   const translateY = useSharedValue(0);
 
   useEffect(() => {
-    if (bob) {
+    if (!bob) return;
+    // Deferred past mount — this is often the very first Reanimated
+    // animation the app ever drives (e.g. right as the splash screen's
+    // transition into home is still animating), and starting one mid-transition
+    // has been a source of native crashes.
+    const task = InteractionManager.runAfterInteractions(() => {
       translateY.value = withRepeat(
         withTiming(-6, { duration: duration / 2, easing: Easing.inOut(Easing.ease) }),
         -1,
         true,
       );
-    }
+    });
+    return () => task.cancel();
   }, [bob, duration]);
 
   const animatedStyle = useAnimatedStyle(() => ({

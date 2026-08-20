@@ -65,7 +65,8 @@
             ]
           }
         }
-      ]
+      ],
+      "@sentry/react-native"
     ],
     "experiments": {
       "typedRoutes": true
@@ -75,12 +76,6 @@
       "eas": {
         "projectId": "7eda9147-451e-43bb-a150-52d408f3f303"
       }
-    },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/7eda9147-451e-43bb-a150-52d408f3f303"
     }
   }
 }

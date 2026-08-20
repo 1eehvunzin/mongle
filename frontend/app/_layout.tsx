@@ -5,11 +5,27 @@ import { Stack } from "expo-router";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
+import * as Sentry from "@sentry/react-native";
 import { ensureSession, session } from "../lib/session";
 import { ensureAccount } from "../lib/auth";
 import { flushPendingCrash, recordCrash } from "../lib/crashLog";
 import { captureConsent } from "../constants/consent";
 import { onboardingState } from "../constants/onboarding";
+
+// The production iOS build has been aborting within a few seconds of launch
+// since build 10, from a native ObjC exception (a TurboModule void method
+// invocation) that never reaches JS — the ErrorUtils handler below can't see
+// it, and the raw device crash logs don't carry the exception's reason or
+// original stack either. Sentry's native iOS SDK hooks the same
+// NSException path lib/crashLog.ts can't reach, so its report should
+// finally show which native module is actually throwing.
+const sentryDsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
+if (sentryDsn) {
+  Sentry.init({
+    dsn: sentryDsn,
+    tracesSampleRate: 0,
+  });
+}
 
 // Installed at module scope (not inside the component) so it's active as
 // early as possible — see lib/crashLog.ts for why this exists.
@@ -21,7 +37,7 @@ globalAny.ErrorUtils?.setGlobalHandler?.((error: unknown, isFatal?: boolean) => 
   });
 });
 
-export default function RootLayout() {
+function RootLayout() {
   const [fontsLoaded] = useFonts({
     "Pretendard-Regular": require("../assets/fonts/Pretendard-Regular.otf"),
     "Pretendard-Medium": require("../assets/fonts/Pretendard-Medium.otf"),
@@ -86,3 +102,5 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
+
+export default Sentry.wrap(RootLayout);

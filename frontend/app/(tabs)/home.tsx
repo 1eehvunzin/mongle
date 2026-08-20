@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  InteractionManager,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -214,7 +215,12 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
-    fetchLocation();
+    // Deferred past the in-flight screen transition (this mounts right as
+    // the splash screen's router.replace lands) — presenting the system
+    // location-permission alert while a navigation transition is still
+    // animating is a known source of iOS crashes.
+    const task = InteractionManager.runAfterInteractions(fetchLocation);
+    return () => task.cancel();
   }, [fetchLocation]);
 
   const loadWeather = useCallback(async () => {
@@ -299,16 +305,25 @@ export default function HomeScreen() {
 
       const loginSeen = await getLoginOnboardingSeen();
       if (cancelled) return;
-      if (!account.token && !loginSeen) {
-        router.push("/login-onboarding");
-      } else {
-        router.push("/nickname");
-      }
+      // Deferred: this screen has often *just* mounted as the target of the
+      // splash screen's own router.replace, whose transition may still be
+      // animating in — pushing another (modal) screen on top of a
+      // still-in-flight transition is a known source of native crashes.
+      InteractionManager.runAfterInteractions(() => {
+        if (cancelled) return;
+        if (!account.token && !loginSeen) {
+          router.push("/login-onboarding");
+        } else {
+          router.push("/nickname");
+        }
+      });
     })().catch(() => {
       // backend/network unreachable — fall back to whatever's already
       // known rather than blocking the home screen indefinitely.
       if (!cancelled && !session.nickname && !account.token) {
-        router.push("/login-onboarding");
+        InteractionManager.runAfterInteractions(() => {
+          if (!cancelled) router.push("/login-onboarding");
+        });
       }
     });
     return () => {
