@@ -297,6 +297,11 @@ class TodaySkyOut(BaseModel):
     cloud_name: str
     cloud_type: str
     message: str
+    # OpenWeatherMap's own city name for these coords — piggybacked onto this
+    # response since we're already calling them for the temp/condition. Lets
+    # home.tsx fall back to a real place name on platforms (mainly web)
+    # where expo-location's on-device reverseGeocodeAsync isn't available.
+    place_name: str | None = None
 
 
 def _map_condition(owm_main: str, clouds_pct: int, is_evening: bool) -> str:
@@ -403,6 +408,7 @@ async def today_sky(lat: float, lng: float):
         cloud_name=match.name,
         cloud_type=match.type,
         message=parsed.get("message", ""),
+        place_name=data.get("name") or None,
     )
 
 

@@ -74,6 +74,7 @@ export type TodaySkyOut = {
   cloud_name: string;
   cloud_type: string;
   message: string;
+  place_name: string | null;
 };
 
 export function getTodaySky(lat: number, lng: number) {

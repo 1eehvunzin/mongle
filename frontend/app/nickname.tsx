@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Alert, Platform, Pressable, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import MongleMascot from "../components/MongleMascot";
 import Glass from "../components/Glass";
@@ -22,7 +22,8 @@ export default function NicknameScreen() {
   const { mode } = useLocalSearchParams<{ mode?: string }>();
   const editing = mode === "edit";
   const [nickname, setNickname] = useState("구름지기");
-  const disabled = nickname.trim().length < 2;
+  const [saving, setSaving] = useState(false);
+  const disabled = nickname.trim().length < 2 || saving;
 
   useEffect(() => {
     if (!editing) return;
@@ -31,19 +32,31 @@ export default function NicknameScreen() {
     });
   }, [editing]);
 
+  // Waits for the save (local mirror + server, if signed in) to actually
+  // land before closing — this used to fire the first-time save-and-close
+  // without awaiting it, so a slow/failed network call quietly left the
+  // account's server-side nickname empty and the modal reappeared on every
+  // later launch even though the user had already "finished" onboarding.
   const start = async () => {
     const trimmed = nickname.trim();
-    if (editing) {
+    setSaving(true);
+    try {
       await saveNickname(trimmed);
-      router.back();
+    } catch {
+      setSaving(false);
+      const message = "닉네임 저장에 실패했어요. 다시 시도해주세요.";
+      if (Platform.OS === "web") {
+        (globalThis as any).window?.alert(message);
+      } else {
+        Alert.alert("저장 실패", message);
+      }
       return;
     }
-    onboardingState.nicknameSet = true;
-    session.nickname = trimmed;
-    saveNickname(trimmed).catch(() => {
-      // best-effort — the session flag above already lets this session
-      // move on.
-    });
+    if (!editing) {
+      onboardingState.nicknameSet = true;
+      session.nickname = trimmed;
+    }
+    setSaving(false);
     router.back();
   };
 
@@ -163,7 +176,7 @@ export default function NicknameScreen() {
                 className="font-bold"
                 style={{ fontSize: rs(15), color: glass.ink }}
               >
-                {editing ? "저장하기" : "시작하기"}
+                {saving ? "저장 중…" : editing ? "저장하기" : "시작하기"}
               </Text>
             </Glass>
           </Pressable>

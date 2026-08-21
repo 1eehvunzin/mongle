@@ -111,55 +111,57 @@ export default function ShareScreen() {
     setSharing(true);
     let shouldClose = false;
     try {
+      setExportingFlat(true);
+      // Let the corner-radius style change above actually paint before the
+      // view snapshot is taken — captureRef reads whatever's on screen at
+      // that instant.
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
       if (Platform.OS === "web") {
+        // Same composited 9:16 story card the native branch below shares —
+        // this used to just re-fetch the raw photo instead, so what went
+        // out on web was the plain camera photo, not the actual story card
+        // (place/temp/mascot bubble) visible on screen.
+        const dataUri = await captureRef(cardRef, {
+          format: "jpg",
+          quality: 0.92,
+          result: "data-uri",
+        });
+        setExportingFlat(false);
+
+        const blob = await (await fetch(dataUri)).blob();
+        const file = new File([blob], `mongle-catch-${item.id}.jpg`, {
+          type: "image/jpeg",
+        });
+
         const nav = globalThis.navigator as Navigator & {
           share?: (data: any) => Promise<void>;
           canShare?: (data: any) => boolean;
         };
 
-        if (nav.share) {
-          const sharePayload: {
-            title: string;
-            text: string;
-            url?: string;
-            files?: File[];
-          } = {
+        if (nav.share && nav.canShare?.({ files: [file] })) {
+          await nav.share({
             title: "몽글 스토리",
             text: `${item.cloud_name} · ${item.cloud_type}`,
-            url: shareUrl,
-          };
-
-          if (photoUrl) {
-            try {
-              const res = await fetch(photoUrl);
-              const blob = await res.blob();
-              const file = new File([blob], `mongle-catch-${item.id}.jpg`, {
-                type: blob.type || "image/jpeg",
-              });
-              if (nav.canShare?.({ files: [file] })) {
-                sharePayload.files = [file];
-                delete sharePayload.url;
-              }
-            } catch {
-              // If remote image fetch is blocked (CORS, offline), fallback to URL share.
-            }
-          }
-
-          await nav.share(sharePayload);
-          shouldClose = true;
+            files: [file],
+          });
         } else {
-          await Clipboard.setStringAsync(shareUrl);
-          setLinkCopied(true);
-          setTimeout(() => setLinkCopied(false), 1500);
+          // No Web Share file support (common on desktop browsers) — hand
+          // the story card to the browser's own download flow instead, so
+          // "export" still produces the card even without a share sheet.
+          const blobUrl = (globalThis as any).URL.createObjectURL(blob);
+          const doc = (globalThis as any).document;
+          const a = doc.createElement("a");
+          a.href = blobUrl;
+          a.download = `mongle-catch-${item.id}.jpg`;
+          doc.body.appendChild(a);
+          a.click();
+          a.remove();
+          (globalThis as any).URL.revokeObjectURL(blobUrl);
         }
+        shouldClose = true;
       } else {
-        setExportingFlat(true);
-        // Let the corner-radius style change above actually paint before the
-        // native view snapshot is taken — captureRef reads whatever's on
-        // screen at that instant.
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-
         const uri = await captureRef(cardRef, { format: "jpg", quality: 0.92 });
         setExportingFlat(false);
 

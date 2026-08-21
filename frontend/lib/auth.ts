@@ -189,13 +189,14 @@ async function signInWithAppleWeb(): Promise<AccountOut> {
   return completeSignIn(token, info);
 }
 
-// If this device has pre-existing local-only data, ask before touching
-// anything — migrateLocalDataToServer() transfers it (deletes the local
-// copy once it's confirmed on the server), so this isn't undoable.
+// If this device has pre-existing local-only catch records, ask before
+// touching anything — migrateLocalDataToServer() transfers them (deletes
+// the local copy once it's confirmed on the server), so this isn't undoable.
+// Nickname doesn't go through this prompt — see migrateLocalNickname.
 function confirmMigration(): Promise<boolean> {
   if (Platform.OS === "web") {
     const confirmed = (globalThis as any).window?.confirm(
-      "이 기기에 저장된 닉네임과 구름 기록을 계정에 연결하시겠어요?",
+      "이 기기에 저장된 구름 기록을 계정에 연결하시겠어요?",
     );
     return Promise.resolve(Boolean(confirmed));
   }
@@ -203,7 +204,7 @@ function confirmMigration(): Promise<boolean> {
   return new Promise((resolve) => {
     Alert.alert(
       "로컬 데이터를 연결하시겠습니까?",
-      "이 기기에 저장된 닉네임과 구름 기록을 계정에 연결할 수 있어요. 연결하면 이 기기에는 더 이상 따로 남아있지 않아요.",
+      "이 기기에 저장된 구름 기록을 계정에 연결할 수 있어요. 연결하면 이 기기에는 더 이상 따로 남아있지 않아요.",
       [
         { text: "아니요", style: "cancel", onPress: () => resolve(false) },
         { text: "연결하기", onPress: () => resolve(true) },
@@ -225,7 +226,15 @@ async function finishSignIn(
     hasLocalDataToMigrate,
     markMigrationDecided,
     migrateLocalDataToServer,
+    migrateLocalNickname,
   } = await import("./localStore");
+
+  // Nickname always carries over silently — it doesn't wait on (or need)
+  // the catches-migration confirmation below. See migrateLocalNickname's
+  // own comment for why this is split out from that flow.
+  const withNickname = await migrateLocalNickname(token, !!fallback.nickname);
+  if (withNickname) account.info = withNickname;
+
   if (await hasLocalDataToMigrate()) {
     if (await confirmMigration()) {
       const result = await migrateLocalDataToServer(token);

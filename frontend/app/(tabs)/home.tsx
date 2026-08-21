@@ -192,18 +192,18 @@ export default function HomeScreen() {
           longitude: pos.coords.longitude,
         });
         if (isMountedRef.current) {
-          setPlaceName(
-            place?.name ?? place?.district ?? place?.city ?? "현재 위치",
-          );
+          setPlaceName(place?.name ?? place?.district ?? place?.city ?? null);
         }
       } catch (e) {
         // reverseGeocodeAsync isn't available on web in many browsers —
         // logged as info, not a warning, since this is expected there.
+        // Left null rather than a generic "현재 위치" — loadWeather fills
+        // this in from OpenWeatherMap's own city name instead once it
+        // resolves, so the chip still gets a real place name on web.
         console.info(
           "[home/weather] reverseGeocodeAsync failed (expected on web):",
           e,
         );
-        if (isMountedRef.current) setPlaceName("현재 위치");
       }
     } catch (e) {
       clearTimeout(timeoutId);
@@ -227,7 +227,12 @@ export default function HomeScreen() {
     if (!coords) return;
     setWeatherStatus("loading");
     try {
-      setTodaySky(await getTodaySky(coords.lat, coords.lng));
+      const data = await getTodaySky(coords.lat, coords.lng);
+      setTodaySky(data);
+      // Only fills a still-unknown place name (e.g. reverseGeocodeAsync
+      // isn't available on web) — never overrides a real on-device result,
+      // and never overwrites an explicit permission/timeout error message.
+      setPlaceName((prev) => prev ?? data.place_name ?? "현재 위치");
       setUpdatedAt(new Date());
       setWeatherStatus("loaded");
     } catch (e) {

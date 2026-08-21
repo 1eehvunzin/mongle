@@ -19,6 +19,7 @@ import {
 import { computeLevel } from "./levelSystem";
 import { account } from "./auth";
 import {
+  AccountOut,
   createServerCatch,
   getServerCatch,
   getServerFeed,
@@ -278,6 +279,27 @@ export async function setConsent(granted: boolean): Promise<void> {
   await AsyncStorage.setItem(CONSENT_KEY, granted ? "1" : "0");
 }
 
+// Nickname is cheap, low-stakes data — unlike catches (photos + records,
+// which need the explicit "연결하시겠어요?" confirmation before anything
+// local gets deleted), a local guest nickname always just follows the user
+// into whichever account they next sign into, with no prompt of its own.
+// Only fills in a still-empty account nickname; never overwrites one the
+// account already has. Called from lib/auth.ts's finishSignIn on every
+// sign-in, independent of (and before) the catches-migration flow below.
+export async function migrateLocalNickname(
+  token: string,
+  hasServerNickname: boolean,
+): Promise<AccountOut | null> {
+  if (hasServerNickname) return null;
+  const localNickname = await AsyncStorage.getItem(NICKNAME_KEY);
+  if (!localNickname) return null;
+  try {
+    return await updateServerNickname(token, localNickname);
+  } catch {
+    return null;
+  }
+}
+
 // Gates login-onboarding.tsx independently of onboardingState.nicknameSet —
 // a device that already has a nickname (an earlier session, a reinstall
 // that restored AsyncStorage, etc.) still hasn't necessarily seen the login
@@ -467,13 +489,13 @@ async function photoUriToBase64(uri: string): Promise<string | null> {
 }
 
 // Checked before ever prompting "로컬 데이터를 연결하시겠습니까?" (see
-// lib/auth.ts's finishSignIn) — false once MIGRATED_KEY is set, whether
-// migration actually ran or the user declined it, so that decision is only
-// ever asked once per device.
+// lib/auth.ts's finishSignIn) — catches only, since the nickname now moves
+// over silently via migrateLocalNickname above rather than through this
+// confirmation. False once MIGRATED_KEY is set, whether migration actually
+// ran or the user declined it, so that decision is only ever asked once per
+// device.
 export async function hasLocalDataToMigrate(): Promise<boolean> {
   if (await AsyncStorage.getItem(MIGRATED_KEY)) return false;
-  const nickname = await AsyncStorage.getItem(NICKNAME_KEY);
-  if (nickname) return true;
   const catches = await readCatches();
   return catches.length > 0;
 }
@@ -501,25 +523,15 @@ export async function clearLocalAccountMirror(): Promise<void> {
 }
 
 // Runs after the user confirms "로컬 데이터를 연결하시겠습니까?" (see
-// lib/auth.ts's finishSignIn): pushes nickname/catches up to the account,
-// then clears them locally — this is a *transfer*, not a copy, so the
-// device doesn't end up with the same data live in two places. Only
-// removes what actually made it to the server; anything that fails to
-// upload (network blip, bad photo) is left in place rather than lost.
+// lib/auth.ts's finishSignIn): pushes catches up to the account, then
+// clears them locally — this is a *transfer*, not a copy, so the device
+// doesn't end up with the same data live in two places. Only removes what
+// actually made it to the server; anything that fails to upload (network
+// blip, bad photo) is left in place rather than lost. Nickname isn't
+// handled here — see migrateLocalNickname above.
 export async function migrateLocalDataToServer(
   token: string,
 ): Promise<{ failed: number }> {
-  const localNickname = await AsyncStorage.getItem(NICKNAME_KEY);
-  let nicknameFailed = false;
-  if (localNickname) {
-    try {
-      await updateServerNickname(token, localNickname);
-      await AsyncStorage.removeItem(NICKNAME_KEY);
-    } catch {
-      nicknameFailed = true;
-    }
-  }
-
   const localCatches = await readCatches();
   const remaining: StoredCatch[] = [];
   for (const c of localCatches) {
@@ -551,7 +563,7 @@ export async function migrateLocalDataToServer(
   }
   await writeCatches(remaining);
 
-  const failed = remaining.length + (nicknameFailed ? 1 : 0);
+  const failed = remaining.length;
   if (failed === 0) await markMigrationDecided();
   return { failed };
 }
