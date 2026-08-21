@@ -1,7 +1,5 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
-import { CircleMarker, MapContainer, Popup, TileLayer } from "react-leaflet";
-import "leaflet/dist/leaflet.css";
 import { useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -12,6 +10,36 @@ import { CatchOut, getMapPins } from "../lib/localStore";
 import { ensureAccount } from "../lib/auth";
 
 const DEFAULT_CENTER = { lat: 37.565, lng: 126.99 };
+
+// react-leaflet (and leaflet underneath it) touch `window` at module-load
+// time, not just at render time — fine in an actual browser, but this
+// screen also gets loaded by `expo export -p web`'s static-render pass,
+// which renders every route once in Node (no `window`/`document`) to build
+// the hydration shell. A static top-level import here crashed that pass
+// every time, which is why the web deploy had never once succeeded.
+// Loaded dynamically after mount instead, so the import only ever runs in
+// the browser.
+type LeafletModule = typeof import("react-leaflet");
+let leafletModule: LeafletModule | null = null;
+
+function useLeafletModule(): LeafletModule | null {
+  const [mod, setMod] = useState(leafletModule);
+  useEffect(() => {
+    if (leafletModule) return;
+    let cancelled = false;
+    import("leaflet/dist/leaflet.css").then(() =>
+      import("react-leaflet").then((m) => {
+        if (cancelled) return;
+        leafletModule = m;
+        setMod(m);
+      }),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return mod;
+}
 
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -25,6 +53,7 @@ function timeAgo(iso: string): string {
 export default function MapScreen() {
   const [pins, setPins] = useState<CatchOut[]>([]);
   const [loading, setLoading] = useState(true);
+  const leaflet = useLeafletModule();
   const load = useCallback(async () => {
     try {
       await ensureAccount();
@@ -94,43 +123,55 @@ export default function MapScreen() {
               backgroundColor: glass.gray.top,
             }}
           >
-            <MapContainer
-              center={[
-                pins.find((pin) => pin.lat != null && pin.lng != null)?.lat ??
-                  DEFAULT_CENTER.lat,
-                pins.find((pin) => pin.lat != null && pin.lng != null)?.lng ??
-                  DEFAULT_CENTER.lng,
-              ]}
-              zoom={12}
-              style={{ width: "100%", height: "100%" }}
-              scrollWheelZoom
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              {pins
-                .filter((pin) => pin.lat != null && pin.lng != null)
-                .map((pin) => (
-                  <CircleMarker
-                    key={pin.id}
-                    center={[pin.lat as number, pin.lng as number]}
-                    radius={9}
-                    pathOptions={{
-                      color: "#244F5D",
-                      fillColor: "#8FC7D5",
-                      fillOpacity: 0.95,
-                      weight: 3,
-                    }}
-                  >
-                    <Popup>
-                      <strong>{pin.cloud_name}</strong>
-                      <br />
-                      {pin.place_name ?? "위치 기록"}
-                    </Popup>
-                  </CircleMarker>
-                ))}
-            </MapContainer>
+            {leaflet ? (
+              <leaflet.MapContainer
+                center={[
+                  pins.find((pin) => pin.lat != null && pin.lng != null)
+                    ?.lat ?? DEFAULT_CENTER.lat,
+                  pins.find((pin) => pin.lat != null && pin.lng != null)
+                    ?.lng ?? DEFAULT_CENTER.lng,
+                ]}
+                zoom={12}
+                style={{ width: "100%", height: "100%" }}
+                scrollWheelZoom
+              >
+                <leaflet.TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                {pins
+                  .filter((pin) => pin.lat != null && pin.lng != null)
+                  .map((pin) => (
+                    <leaflet.CircleMarker
+                      key={pin.id}
+                      center={[pin.lat as number, pin.lng as number]}
+                      radius={9}
+                      pathOptions={{
+                        color: "#244F5D",
+                        fillColor: "#8FC7D5",
+                        fillOpacity: 0.95,
+                        weight: 3,
+                      }}
+                    >
+                      <leaflet.Popup>
+                        <strong>{pin.cloud_name}</strong>
+                        <br />
+                        {pin.place_name ?? "위치 기록"}
+                      </leaflet.Popup>
+                    </leaflet.CircleMarker>
+                  ))}
+              </leaflet.MapContainer>
+            ) : (
+              <View
+                style={{
+                  flex: 1,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <ActivityIndicator color={glass.accent} />
+              </View>
+            )}
           </View>
 
           <Text
