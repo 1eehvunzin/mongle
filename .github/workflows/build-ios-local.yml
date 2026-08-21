@@ -16,6 +16,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # macos-15 runners ship several Xcode versions side by side, and the
+      # one xcode-select defaults to isn't necessarily the newest — Apple
+      # rejects App Store Connect uploads built with anything older than
+      # its current minimum Xcode/iOS SDK, which is what was actually
+      # failing at submit time. Pinning to the newest available Xcode here
+      # (rather than a hardcoded version, which will itself go stale) is
+      # what eas build --local invokes under the hood.
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -40,7 +52,10 @@ jobs:
           path: frontend/build.ipa
           retention-days: 14
 
-      - name: Submit to TestFlight
-        run: npx eas-cli submit --platform ios --profile production --path ./build.ipa --non-interactive
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      # TestFlight submit is intentionally NOT automated here — Apple's
+      # processing step for a submission can surface real (not just
+      # interactive-prompt) errors that need a person to see and react to,
+      # e.g. the Xcode/SDK-too-old rejection this workflow used to hit
+      # before the Xcode step above was added. Download the mongle-ios-build
+      # artifact from this run instead and submit locally:
+      #   cd frontend && npx eas-cli submit --platform ios --profile production --path ./build.ipa
