@@ -7,12 +7,20 @@ import AppIpad from "./AppIpad";
 import Hero from "./Hero";
 import PhoneOnly from "./PhoneOnly";
 import PhonesOnly from "./PhonesOnly";
+import MockupsOnly from "./MockupsOnly";
 
-// ?view=hero, ?view=phone, ?view=phones, or ?view=ipad switches the mounted
-// export target — keeps the one-off promo composites out of the main
-// 6-panel App Store canvas while reusing its same components/fonts/theme.
+// ?view=hero, ?view=phone, ?view=phones, ?view=ipad, or ?view=mockups
+// switches the mounted export target — keeps the one-off promo composites
+// out of the main 6-panel App Store canvas while reusing its same
+// components/fonts/theme.
 const view = new URLSearchParams(location.search).get("view");
-const View = view === "hero" ? Hero : view === "phone" ? PhoneOnly : view === "phones" ? PhonesOnly : view === "ipad" ? AppIpad : App;
+const View =
+  view === "hero" ? Hero :
+  view === "phone" ? PhoneOnly :
+  view === "phones" ? PhonesOnly :
+  view === "ipad" ? AppIpad :
+  view === "mockups" ? MockupsOnly :
+  App;
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

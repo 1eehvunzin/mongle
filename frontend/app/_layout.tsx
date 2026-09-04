@@ -31,11 +31,13 @@ if (sentryDsn) {
 // early as possible — see lib/crashLog.ts for why this exists.
 const globalAny = global as any;
 const defaultErrorHandler = globalAny.ErrorUtils?.getGlobalHandler?.();
-globalAny.ErrorUtils?.setGlobalHandler?.((error: unknown, isFatal?: boolean) => {
-  recordCrash(error, !!isFatal).finally(() => {
-    defaultErrorHandler?.(error, isFatal);
-  });
-});
+globalAny.ErrorUtils?.setGlobalHandler?.(
+  (error: unknown, isFatal?: boolean) => {
+    recordCrash(error, !!isFatal).finally(() => {
+      defaultErrorHandler?.(error, isFatal);
+    });
+  },
+);
 
 function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -98,6 +100,7 @@ function RootLayout() {
           options={{ presentation: "transparentModal", animation: "fade" }}
         />
         <Stack.Screen name="share" />
+        <Stack.Screen name="support" />
       </Stack>
     </SafeAreaProvider>
   );

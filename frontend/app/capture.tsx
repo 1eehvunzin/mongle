@@ -57,7 +57,9 @@ export default function CaptureScreen() {
   const [zoom, setZoom] = useState(0);
   const pinchRef = useRef<{ distance: number; zoom: number } | null>(null);
 
-  const touchDistance = (touches: GestureResponderEvent["nativeEvent"]["touches"]) => {
+  const touchDistance = (
+    touches: GestureResponderEvent["nativeEvent"]["touches"],
+  ) => {
     const [a, b] = touches;
     return Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
   };
@@ -297,7 +299,7 @@ export default function CaptureScreen() {
                       className="font-bold"
                       style={{ fontSize: rs(13), color: glass.ink }}
                     >
-                      카메라 권한 허용하기
+                      계속하기
                     </Text>
                   </Glass>
                 </Pressable>

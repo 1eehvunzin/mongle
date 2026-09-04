@@ -271,12 +271,14 @@ export default function HomeScreen() {
 
   const onRefreshHome = async () => {
     setHomeRefreshing(true);
-    // Pull-to-refresh used to only reload the level/streak stats — the
-    // weather card had no way to recover from an error short of the tiny
-    // spin button inside it. Same coords-missing gap as the spin button:
-    // retry location itself rather than calling loadWeather(), which
-    // silently no-ops without coords.
-    await Promise.all([loadHome(), coords ? loadWeather() : fetchLocation()]);
+    // Always re-poll the device's actual GPS position here, not just
+    // loadWeather() with whatever coords were captured once at mount —
+    // once coords was set the first time, this used to never call
+    // fetchLocation() again, so the place/weather stayed frozen at the
+    // very first location forever, no matter how often you refreshed.
+    // fetchLocation() itself triggers loadWeather() via the effect below
+    // once new coords land.
+    await Promise.all([loadHome(), fetchLocation()]);
     setHomeRefreshing(false);
   };
 
@@ -350,14 +352,11 @@ export default function HomeScreen() {
       easing: Easing.inOut(Easing.ease),
     });
 
-    // Without coords (a denied/timed-out/failed location fetch),
-    // loadWeather() can't do anything — retry location itself instead of
-    // just spinning the icon and reporting the same "정보 없음" again.
-    if (coords) {
-      await loadWeather();
-    } else {
-      await fetchLocation();
-    }
+    // Always re-poll the device's actual GPS position, not just re-run
+    // loadWeather() with the coords from the very first fetch — see
+    // onRefreshHome above for why keeping that conditional froze the
+    // location permanently after the first successful fix.
+    await fetchLocation();
     setRefreshing(false);
   }
 

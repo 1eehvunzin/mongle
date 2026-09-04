@@ -24,7 +24,6 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
       ]
@@ -39,13 +38,15 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "몽글이 구름 사진을 찍기 위해 카메라 접근 권한이 필요해요."
+          "cameraPermission": "몽글이 구름 사진을 찍기 위해 카메라 접근 권한이 필요해요. (Camera access is required to take photos of clouds.)",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "몽글이 촬영 장소를 기록하기 위해 위치 접근 권한이 필요해요."
+          "locationWhenInUsePermission": "몽글이 촬영 장소를 기록하기 위해 위치 접근 권한이 필요해요. (Location access is used to record where each photo was taken.)"
         }
       ],
       "expo-secure-store",

@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react";
 import {
   Alert,
-  Linking,
   Platform,
   Pressable,
   RefreshControl,
@@ -22,11 +21,9 @@ import { AccountOut } from "../../lib/api";
 
 const WEEK_LABELS = ["월", "화", "수", "목", "금", "토", "일"];
 
-function sendFeedback() {
-  Linking.openURL(
-    "mailto:monglegroom@gmail.com?subject=" + encodeURIComponent("몽글 피드백"),
-  );
-}
+// Used from the standalone /support page's own email button now — the
+// settings row below sends users there first instead of straight to a
+// mailto: link (see support.tsx for why).
 
 // Both the streak card and the contribution graph now draw from the same
 // glass.blue family the rest of the app (home/feed/tab bar) already uses —
@@ -451,7 +448,7 @@ export default function ProfileScreen() {
             <SettingsRow
               icon="chatbubble-ellipses-outline"
               label="피드백 보내기"
-              onPress={sendFeedback}
+              onPress={() => router.push("/support")}
             />
             <SettingsRow
               icon="information-circle-outline"

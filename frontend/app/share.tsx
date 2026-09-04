@@ -17,6 +17,7 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
+import * as FileSystem from "expo-file-system/legacy";
 import * as MediaLibrary from "expo-media-library";
 import * as Sharing from "expo-sharing";
 import { captureRef } from "react-native-view-shot";
@@ -44,7 +45,19 @@ function formatCapturedAt(iso: string): string {
 
 export default function ShareScreen() {
   const insets = useSafeAreaInsets();
-  const { width: screenW, height: screenH } = useWindowDimensions();
+  const liveDims = useWindowDimensions();
+  // On mobile web, the browser chrome (address bar) collapsing/expanding
+  // right after a hard refresh fires resize events that change
+  // window.innerHeight several times in the first second or so — since the
+  // card's size is derived straight from screenH, that made the whole story
+  // card visibly resize/jump right after the page loaded. The card's own
+  // aspect ratio never actually needs to track that: freeze to whatever
+  // dimensions were present at first mount instead of re-deriving on every
+  // resize (native apps don't get spurious resizes like this, so this only
+  // applies on web).
+  const initialDimsRef = useRef(liveDims);
+  const { width: screenW, height: screenH } =
+    Platform.OS === "web" ? initialDimsRef.current : liveDims;
   const { catchId } = useLocalSearchParams<{ catchId?: string }>();
 
   const [item, setItem] = useState<CatchOut | null>(null);
@@ -87,12 +100,51 @@ export default function ShareScreen() {
     if (!photoUrl || saveState === "saving") return;
     setSaveState("saving");
     try {
+      if (Platform.OS === "web") {
+        // expo-media-library has no web implementation at all — every call
+        // below used to just throw and land in the catch block, so "저장"
+        // silently failed on web every time. Hand the photo to the
+        // browser's own download flow instead.
+        const blob = await (await fetch(photoUrl)).blob();
+        const blobUrl = (globalThis as any).URL.createObjectURL(blob);
+        const doc = (globalThis as any).document;
+        const a = doc.createElement("a");
+        a.href = blobUrl;
+        a.download = `mongle-${item?.id ?? "catch"}.jpg`;
+        doc.body.appendChild(a);
+        a.click();
+        a.remove();
+        (globalThis as any).URL.revokeObjectURL(blobUrl);
+        setSaveState("saved");
+        return;
+      }
+
       const perm = await MediaLibrary.requestPermissionsAsync();
       if (!perm.granted) {
         setSaveState("error");
         return;
       }
-      await MediaLibrary.createAssetAsync(photoUrl);
+
+      // MediaLibrary.createAssetAsync needs a local file:// path — fine for
+      // a guest catch's on-device photo, but a signed-in account's photo_url
+      // is a remote https URL served by the API, which createAssetAsync
+      // can't ingest directly and used to just throw here every time.
+      // Pull it down to a local temp file first in that case.
+      let localUri = photoUrl;
+      if (!photoUrl.startsWith("file://")) {
+        const dest = `${FileSystem.cacheDirectory}mongle-save-${Date.now()}.jpg`;
+        if (photoUrl.startsWith("data:")) {
+          const base64 = photoUrl.split(",")[1] ?? "";
+          await FileSystem.writeAsStringAsync(dest, base64, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          localUri = dest;
+        } else {
+          const { uri } = await FileSystem.downloadAsync(photoUrl, dest);
+          localUri = uri;
+        }
+      }
+      await MediaLibrary.createAssetAsync(localUri);
       setSaveState("saved");
     } catch {
       setSaveState("error");
