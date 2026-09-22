@@ -16,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { glass } from "../../constants/aquaTheme";
 import { rs } from "../../constants/scale";
 import { getProfile, ProfileOut } from "../../lib/localStore";
+import { addMockCatches, removeMockCatches } from "../../lib/mockData";
 import { account, ensureAccount, signOut, withdraw } from "../../lib/auth";
 import { AccountOut } from "../../lib/api";
 
@@ -64,6 +65,18 @@ export default function ProfileScreen() {
       ensureAccount().then(() => setAccountInfo(account.info));
     }, [loadProfile]),
   );
+
+  // Dev-only: local mock catches for checking feed/map/home components.
+  const [devStatus, setDevStatus] = useState<string | null>(null);
+  const runDev = async (action: () => Promise<string>) => {
+    try {
+      setDevStatus(await action());
+      await loadProfile();
+    } catch (e) {
+      setDevStatus("실패");
+      console.warn("[dev mock]", e);
+    }
+  };
 
   const handleLogout = async () => {
     if (Platform.OS === "web") {
@@ -458,6 +471,52 @@ export default function ProfileScreen() {
             />
           </Glass>
         </View>
+
+        {__DEV__ ? (
+          <View style={{ marginHorizontal: rs(16), marginBottom: rs(16) }}>
+            <Glass
+              tone={glass.white}
+              radius={rs(16)}
+              highlight={false}
+              style={{
+                borderWidth: 1,
+                borderColor: glass.border,
+                overflow: "hidden",
+              }}
+            >
+              <SettingsRow
+                icon="flask-outline"
+                label="목데이터 넣기 (로컬 전용)"
+                value={devStatus ?? undefined}
+                onPress={() =>
+                  runDev(async () => `${await addMockCatches()}개 추가됨`)
+                }
+              />
+              <SettingsRow
+                icon="trash-bin-outline"
+                label="목데이터 지우기"
+                onPress={() =>
+                  runDev(async () => {
+                    await removeMockCatches();
+                    return "지움";
+                  })
+                }
+                last
+              />
+            </Glass>
+            {accountInfo ? (
+              <Text
+                style={{
+                  fontSize: rs(11),
+                  color: glass.subMuted,
+                  marginTop: rs(6),
+                }}
+              >
+                로그인 상태에서는 서버 데이터만 보여요. 로그아웃 후 확인하세요.
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
 
         {accountInfo ? (
           <View style={{ marginHorizontal: rs(16) }}>

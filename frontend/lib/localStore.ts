@@ -244,16 +244,20 @@ export async function getFeed(limit = 30): Promise<CatchOut[]> {
   return Promise.all(sorted.map(toOut));
 }
 
+// Enough for per-species/neighborhood counts to be meaningful without
+// making the native map render hundreds of custom marker views.
+const MAP_PIN_LIMIT = 100;
+
 export async function getMapPins(): Promise<CatchOut[]> {
   if (account.token) {
-    const rows = await getServerMapPins(account.token, 50);
+    const rows = await getServerMapPins(account.token, MAP_PIN_LIMIT);
     return Promise.all(rows.map((r) => toOut(serverCatchToStored(r))));
   }
   const catches = await readCatches();
   const withLocation = catches
     .filter((c) => c.lat != null && c.lng != null)
     .sort((a, b) => b.id - a.id)
-    .slice(0, 50);
+    .slice(0, MAP_PIN_LIMIT);
   return Promise.all(withLocation.map(toOut));
 }
 
@@ -320,8 +324,15 @@ async function getFirstLaunchAt(): Promise<Date> {
   return now;
 }
 
+// Device-local calendar day (YYYY-MM-DD). This used to slice toISOString(),
+// which is the UTC date — for KST users the "day" rolled over at 09:00, so a
+// 7am catch counted toward the previous day's streak and the reminder logic
+// below would disagree with what the user sees as "today".
 function toLocalDateKey(iso: string): string {
-  return new Date(iso).toISOString().slice(0, 10);
+  const d = new Date(iso);
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
 function streaks(dateKeys: string[]): { current: number; longest: number } {
@@ -437,6 +448,7 @@ export type HomeOut = {
   level_title: string;
   level_progress_pct: number;
   streak_current: number;
+  caught_today: boolean;
   recent_catches: CatchOut[];
 };
 
@@ -452,17 +464,18 @@ export async function getHome(): Promise<HomeOut> {
     level_title: lvl.levelTitle,
     level_progress_pct: lvl.levelProgressPct,
     streak_current: current,
+    caught_today: dateKeys.includes(toLocalDateKey(new Date().toISOString())),
     recent_catches: await Promise.all(recent.map(toOut)),
   };
 }
 
-// Dex "best finish ever pulled" per species, kept around for anything that
-// wants a Pokédex-style summary later even though the dex screen itself was
-// dropped (see TabBar.tsx history) — not currently rendered anywhere.
+// Dex "best finish ever pulled" per species. Drives the feed's collection
+// shelf (there is no separate dex screen). Goes through resolveCatches so a
+// signed-in account sees its server catches, not just this device's.
 export async function getBestFinishBySpecies(): Promise<
   Record<string, CloudTier>
 > {
-  const catches = await readCatches();
+  const catches = await resolveCatches();
   const bySpecies = new Map<string, CloudTier[]>();
   for (const c of catches) {
     bySpecies.set(c.cloudName, [
@@ -473,6 +486,45 @@ export async function getBestFinishBySpecies(): Promise<
   const result: Record<string, CloudTier> = {};
   for (const [name, finishes] of bySpecies) result[name] = bestFinish(finishes);
   return result;
+}
+
+// ---- Dev-only helpers (see lib/mockData.ts) ------------------------------
+// Write straight to this device's AsyncStorage, never to the server. Mock
+// catches live in their own id range so they can be replaced/cleared without
+// touching real local catches.
+const MOCK_ID_BASE = 9000;
+
+export type MockCatchInput = {
+  cloudName: string;
+  cloudType: string;
+  confidence: number | null;
+  finish: CloudTier;
+  memo: string | null;
+  placeName: string | null;
+  lat: number | null;
+  lng: number | null;
+  tempC: number | null;
+  weatherCondition: string | null;
+  photoUri: string | null;
+  capturedAt: string;
+};
+
+export async function seedLocalMockCatches(
+  items: MockCatchInput[],
+): Promise<number> {
+  if (!__DEV__) return 0;
+  const real = (await readCatches()).filter((c) => c.id < MOCK_ID_BASE);
+  // Oldest first so ids grow with time — the feed's "recent" order sorts by id.
+  const mock = [...items]
+    .sort((a, b) => a.capturedAt.localeCompare(b.capturedAt))
+    .map((item, i) => ({ id: MOCK_ID_BASE + i + 1, ...item }));
+  await writeCatches([...real, ...mock]);
+  return mock.length;
+}
+
+export async function clearLocalMockCatches(): Promise<void> {
+  if (!__DEV__) return;
+  await writeCatches((await readCatches()).filter((c) => c.id < MOCK_ID_BASE));
 }
 
 const MIGRATED_KEY = "mongle.migratedToServer";

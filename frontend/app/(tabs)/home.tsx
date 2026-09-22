@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -23,11 +23,13 @@ import Animated, {
 import MongleMascot from "../../components/MongleMascot";
 import HeroBlobs from "../../components/HeroBlobs";
 import Glass from "../../components/Glass";
+import NewsPanel from "../../components/NewsPanel";
 import { glass } from "../../constants/aquaTheme";
 import { onboardingState } from "../../constants/onboarding";
 import { rs } from "../../constants/scale";
 import { getApiBaseUrl, getTodaySky, TodaySkyOut } from "../../lib/api";
 import { getHome, getLoginOnboardingSeen, HomeOut } from "../../lib/localStore";
+import { shouldShowNotificationPrompt, syncReminders } from "../../lib/notifications";
 import { ensureSession, session } from "../../lib/session";
 import { account, completeKakaoWebSignIn, ensureAccount } from "../../lib/auth";
 
@@ -99,6 +101,7 @@ export default function HomeScreen() {
   >("loading");
   const spin = useSharedValue(0);
   const kakaoCodeHandled = useRef(false);
+  const notifAskAttempted = useRef(false);
 
   useEffect(() => {
     setUpdatedAt(new Date());
@@ -257,7 +260,18 @@ export default function HomeScreen() {
   const loadHome = useCallback(async () => {
     try {
       await ensureAccount();
-      setHome(await getHome());
+      const next = await getHome();
+      setHome(next);
+      // Re-plan local reminders from the freshest streak/caught-today state.
+      // Deferred past any in-flight transition (native module calls
+      // mid-transition have crashed this app on iOS before) and never
+      // allowed to break the screen.
+      InteractionManager.runAfterInteractions(() => {
+        syncReminders({
+          streak: next.streak_current,
+          caughtToday: next.caught_today,
+        }).catch(() => {});
+      });
     } catch {
       // best-effort — keep whatever was last loaded, if anything.
     }
@@ -286,6 +300,36 @@ export default function HomeScreen() {
   const levelProgressPct = home?.level_progress_pct ?? 0;
   const streakCurrent = home?.streak_current ?? 0;
   const recentCatches = home?.recent_catches ?? [];
+  const reminderState = useMemo(
+    () =>
+      home && home.recent_catches.length > 0
+        ? { streak: home.streak_current, caughtToday: home.caught_today }
+        : null,
+    [home],
+  );
+
+  // Ask for notification permission once, up front, as a real modal — not a
+  // dismissible card someone can scroll past. Only once there's a first
+  // catch (nothing to remind about before then), and only once per mount;
+  // shouldShowNotificationPrompt() itself skips this for good once declined
+  // or already granted/blocked. Deferred past any in-flight transition —
+  // presenting a native alert or pushing a modal mid-transition has crashed
+  // this app on iOS before.
+  useEffect(() => {
+    if (!reminderState || notifAskAttempted.current) return;
+    notifAskAttempted.current = true;
+    shouldShowNotificationPrompt()
+      .then((show) => {
+        if (show) {
+          InteractionManager.runAfterInteractions(() => {
+            router.push("/notification-ask");
+          });
+        }
+      })
+      .catch(() => {
+        // best-effort — no prompt beats a broken home screen.
+      });
+  }, [reminderState]);
 
   // First launch: login gets first say, nickname second — a nickname is
   // now account-scoped data, not device-local data collected before the
@@ -402,7 +446,7 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        <View style={{ marginHorizontal: rs(16), marginBottom: rs(22) }}>
+        <View style={{ marginHorizontal: rs(16), marginBottom: rs(14) }}>
           <Glass
             tone={sky}
             radius={rs(24)}
@@ -644,10 +688,11 @@ export default function HomeScreen() {
           </Glass>
         </View>
 
+        <NewsPanel hasCatches={recentCatches.length > 0} />
+
         <View
           style={{
             paddingHorizontal: rs(16),
-            marginTop: rs(10),
             marginBottom: rs(11),
           }}
         >

@@ -1,16 +1,18 @@
 import "../global.css";
 import { useEffect } from "react";
 import { useFonts } from "expo-font";
-import { Stack } from "expo-router";
+import { Stack, usePathname } from "expo-router";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
 import * as Sentry from "@sentry/react-native";
+import { PostHogProvider, usePostHog } from "posthog-react-native";
 import { ensureSession, session } from "../lib/session";
 import { ensureAccount } from "../lib/auth";
 import { flushPendingCrash, recordCrash } from "../lib/crashLog";
 import { captureConsent } from "../constants/consent";
 import { onboardingState } from "../constants/onboarding";
+import { seedDevCatchesOnce } from "../lib/devSeed";
 
 // The production iOS build has been aborting within a few seconds of launch
 // since build 10, from a native ObjC exception (a TurboModule void method
@@ -27,9 +29,24 @@ if (sentryDsn) {
   });
 }
 
+const posthogApiKey = process.env.EXPO_PUBLIC_POSTHOG_KEY;
+const posthogHost =
+  process.env.EXPO_PUBLIC_POSTHOG_HOST ?? "https://us.i.posthog.com";
+
+function AnalyticsScreenTracker() {
+  const pathname = usePathname();
+  const posthog = usePostHog();
+
+  useEffect(() => {
+    posthog.screen(pathname);
+  }, [pathname, posthog]);
+
+  return null;
+}
+
 // Installed at module scope (not inside the component) so it's active as
 // early as possible — see lib/crashLog.ts for why this exists.
-const globalAny = global as any;
+const globalAny = globalThis as any;
 const defaultErrorHandler = globalAny.ErrorUtils?.getGlobalHandler?.();
 globalAny.ErrorUtils?.setGlobalHandler?.(
   (error: unknown, isFatal?: boolean) => {
@@ -66,10 +83,14 @@ function RootLayout() {
       // best-effort — screens fall back to signed-out state.
     });
     if (__DEV__) {
-      import("../lib/devSeed").then(({ seedDevCatchesOnce }) => {
-        seedDevCatchesOnce().catch(() => {
-          // best-effort dev-only seed — never block app startup.
-        });
+      // A dynamic import() here used to be how this stayed out of
+      // production bundles, but expo-router's lazy web bundling can't
+      // reliably resolve an async chunk for a plain (non-route) module —
+      // "Requiring unknown module" on a cold Metro cache, reproducibly, not
+      // just a one-off staleness glitch. A static import is what actually
+      // works; __DEV__ still gates the call itself.
+      seedDevCatchesOnce().catch(() => {
+        // best-effort dev-only seed — never block app startup.
       });
     }
     flushPendingCrash();
@@ -79,12 +100,17 @@ function RootLayout() {
     return <View className="flex-1 bg-bg" />;
   }
 
-  return (
+  const app = (
     <SafeAreaProvider>
       <StatusBar style="dark" />
+      {posthogApiKey ? <AnalyticsScreenTracker /> : null}
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
-        <Stack.Screen name="(onboarding)" />
+        {/* No _layout.tsx inside app/(onboarding)/, so expo-router (as of
+            SDK 57) flattens its one screen to this nested name instead of
+            resolving the bare group name — declaring the group itself here
+            logged a "no route named (onboarding)" warning on every render. */}
+        <Stack.Screen name="(onboarding)/splash" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="capture" options={{ presentation: "modal" }} />
         <Stack.Screen
@@ -99,10 +125,26 @@ function RootLayout() {
           name="login-onboarding"
           options={{ presentation: "transparentModal", animation: "fade" }}
         />
+        <Stack.Screen
+          name="notification-ask"
+          options={{ presentation: "transparentModal", animation: "fade" }}
+        />
         <Stack.Screen name="share" />
         <Stack.Screen name="support" />
       </Stack>
     </SafeAreaProvider>
+  );
+
+  return posthogApiKey ? (
+    <PostHogProvider
+      apiKey={posthogApiKey}
+      options={{ host: posthogHost }}
+      autocapture={{ captureScreens: false, captureTouches: false }}
+    >
+      {app}
+    </PostHogProvider>
+  ) : (
+    app
   );
 }
 

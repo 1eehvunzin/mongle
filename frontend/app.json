@@ -18,8 +18,9 @@
     "android": {
       "package": "mongle.cloud.app",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/favicon.png"
+        "backgroundImage": "./assets/android-icon-background.png",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
@@ -49,6 +50,12 @@
           "locationWhenInUsePermission": "몽글이 촬영 장소를 기록하기 위해 위치 접근 권한이 필요해요. (Location access is used to record where each photo was taken.)"
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "color": "#3D7F97"
+        }
+      ],
       "expo-secure-store",
       "expo-apple-authentication",
       [
@@ -67,7 +74,10 @@
           }
         }
       ],
-      "@sentry/react-native"
+      "@sentry/react-native",
+      "expo-localization",
+      "expo-sharing",
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": true

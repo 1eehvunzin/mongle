@@ -1,46 +1,58 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  ImageBackground,
   Platform,
   Pressable,
-  StyleSheet,
   Text,
   useWindowDimensions,
   View,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import * as Clipboard from "expo-clipboard";
-import * as FileSystem from "expo-file-system/legacy";
-import * as MediaLibrary from "expo-media-library";
 import * as Sharing from "expo-sharing";
 import { captureRef } from "react-native-view-shot";
-import MongleMascot from "../components/MongleMascot";
+import MessageCard from "../components/MessageCard";
 import Glass from "../components/Glass";
 import { glass } from "../constants/aquaTheme";
 import { rs } from "../constants/scale";
 import { CatchOut, getCatch } from "../lib/localStore";
 
-// Everything below the card: back-button row, the two-up action row, and
-// the CTA pill, plus their gaps — reserved so the card's own height never
-// pushes "스토리 공유하기" off-screen.
+// How far (in em) html2canvas draws text below where the browser puts it.
+const HTML2CANVAS_TEXT_LIFT_EM = 0.22;
+
+function downloadBlob(blob: Blob, filename: string) {
+  const blobUrl = (globalThis as any).URL.createObjectURL(blob);
+  const doc = (globalThis as any).document;
+  const a = doc.createElement("a");
+  a.href = blobUrl;
+  a.download = filename;
+  doc.body.appendChild(a);
+  a.click();
+  a.remove();
+  (globalThis as any).URL.revokeObjectURL(blobUrl);
+}
+
+// Everything below the card: the back-button row and the CTA pill, plus their
+// gaps — reserved so the card's own height never pushes "스토리 공유하기"
+// off-screen.
 const CHROME_HEIGHT = rs(196);
 
 const PLACEHOLDER_PHOTO = require("../assets/ref/cloud-2.jpg");
 
-function formatCapturedAt(iso: string): string {
-  const d = new Date(iso);
-  const hours = d.getHours();
-  const period = hours < 12 ? "오전" : "오후";
-  const displayHour = hours % 12 === 0 ? 12 : hours % 12;
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${d.getMonth() + 1}월 ${d.getDate()}일 ${period} ${displayHour}:${mm}`;
+// Substring match, not an exact-key lookup — the same approach feed.tsx's
+// own condition-to-icon mapping uses, since the API's condition strings
+// aren't guaranteed to match a fixed key set exactly (e.g. "구름 조금" with
+// a space, vs. home.tsx's own "구름조금" key).
+function weatherEmoji(condition: string): string {
+  if (condition.includes("노을")) return "🌇";
+  if (condition.includes("맑음")) return "☀️";
+  if (condition.includes("조금")) return "⛅";
+  if (condition.includes("비")) return "🌧️";
+  return "☁️";
 }
 
 export default function ShareScreen() {
@@ -62,15 +74,8 @@ export default function ShareScreen() {
 
   const [item, setItem] = useState<CatchOut | null>(null);
   const [loadError, setLoadError] = useState(false);
-  const [saveState, setSaveState] = useState<
-    "idle" | "saving" | "saved" | "error"
-  >("idle");
-  const [linkCopied, setLinkCopied] = useState(false);
   const [sharing, setSharing] = useState(false);
-  // Squares off the card's corners for the instant right before capture —
-  // the on-screen card is rounded, but a story image posted elsewhere
-  // shouldn't carry that rounding baked in as clipped/transparent corners.
-  const [exportingFlat, setExportingFlat] = useState(false);
+  // The card itself (square, no rounding) — this is what gets captured.
   const cardRef = useRef<View>(null);
 
   useEffect(() => {
@@ -80,82 +85,78 @@ export default function ShareScreen() {
       .catch(() => setLoadError(true));
   }, [catchId]);
 
-  const bubbleText = item?.memo?.trim()
+  // The user's own words if they wrote any, otherwise the default line.
+  const caption = item?.memo?.trim()
     ? item.memo.trim()
-    : "오늘 하늘 미쳤다 ☁️";
+    : "구름을 기록하는 방법";
   const photoUrl = item?.photo_url ?? null;
-  const shareUrl = item
-    ? `https://mongle.expo.app/share?catchId=${item.id}`
-    : "https://mongle.expo.app";
+
+  // Place + weather, e.g. "📍서울 성동구  ☀️맑음 22°" — the identity/context an
+  // iMessage screenshot doesn't otherwise carry. Emoji mark each part instead
+  // of a middle-dot separator.
+  const cardMeta = item
+    ? [
+        item.place_name ? `📍${item.place_name}` : null,
+        item.weather_condition
+          ? `${weatherEmoji(item.weather_condition)}${item.weather_condition}${
+              item.temp_c != null ? ` ${Math.round(item.temp_c)}°` : ""
+            }`
+          : null,
+      ]
+        .filter(Boolean)
+        .join("  ") || null
+    : null;
 
   const availableHeight = screenH - insets.top - insets.bottom - CHROME_HEIGHT;
   const widthFromHeight = availableHeight * (9 / 16);
   const horizontalCap = screenW - rs(32);
   const cardWidth = Math.max(rs(150), Math.min(horizontalCap, widthFromHeight));
 
-  // Saves the catch's already-local photo file straight to the device
-  // gallery — not a composited poster render, just the real photo the user
-  // took.
-  const save = async () => {
-    if (!photoUrl || saveState === "saving") return;
-    setSaveState("saving");
-    try {
-      if (Platform.OS === "web") {
-        // expo-media-library has no web implementation at all — every call
-        // below used to just throw and land in the catch block, so "저장"
-        // silently failed on web every time. Hand the photo to the
-        // browser's own download flow instead.
-        const blob = await (await fetch(photoUrl)).blob();
-        const blobUrl = (globalThis as any).URL.createObjectURL(blob);
-        const doc = (globalThis as any).document;
-        const a = doc.createElement("a");
-        a.href = blobUrl;
-        a.download = `mongle-${item?.id ?? "catch"}.jpg`;
-        doc.body.appendChild(a);
-        a.click();
-        a.remove();
-        (globalThis as any).URL.revokeObjectURL(blobUrl);
-        setSaveState("saved");
-        return;
-      }
-
-      const perm = await MediaLibrary.requestPermissionsAsync();
-      if (!perm.granted) {
-        setSaveState("error");
-        return;
-      }
-
-      // MediaLibrary.createAssetAsync needs a local file:// path — fine for
-      // a guest catch's on-device photo, but a signed-in account's photo_url
-      // is a remote https URL served by the API, which createAssetAsync
-      // can't ingest directly and used to just throw here every time.
-      // Pull it down to a local temp file first in that case.
-      let localUri = photoUrl;
-      if (!photoUrl.startsWith("file://")) {
-        const dest = `${FileSystem.cacheDirectory}mongle-save-${Date.now()}.jpg`;
-        if (photoUrl.startsWith("data:")) {
-          const base64 = photoUrl.split(",")[1] ?? "";
-          await FileSystem.writeAsStringAsync(dest, base64, {
-            encoding: FileSystem.EncodingType.Base64,
+  // The shared image is the card exactly as it appears on screen.
+  const captureStory = async (result: "tmpfile" | "data-uri") => {
+    if (Platform.OS === "web") {
+      // react-native-view-shot's captureRef can't run on the web (it needs
+      // findNodeHandle, which React Native Web doesn't implement, so it
+      // always throws). Draw the card with html2canvas directly instead.
+      const { default: html2canvas } = await import("html2canvas");
+      const node = cardRef.current as unknown as HTMLElement | null;
+      if (!node) throw new Error("story card element is missing");
+      const canvas = await html2canvas(node, {
+        useCORS: true,
+        backgroundColor: "#FFFFFF",
+        scale: 2,
+        // html2canvas places text slightly lower than the browser does, by an
+        // amount that scales with the font size — labels sink to the bottom of
+        // their keys and the typed line gets clipped. Nudge every text-bearing
+        // element in the copy that is being drawn back up by that fraction.
+        onclone: (doc: Document, el: HTMLElement) => {
+          const win = doc.defaultView;
+          if (!win) return;
+          el.querySelectorAll<HTMLElement>("*").forEach((n) => {
+            const hasText = Array.from(n.childNodes).some(
+              (c) => c.nodeType === 3 && (c.textContent ?? "").trim() !== "",
+            );
+            if (!hasText) return;
+            const cs = win.getComputedStyle(n);
+            if (cs.position === "absolute") {
+              // Already placed with `top` — lift it from where it is.
+              if (cs.top !== "auto") {
+                n.style.top = `calc(${cs.top} - ${HTML2CANVAS_TEXT_LIFT_EM}em)`;
+              }
+              return;
+            }
+            if (cs.position === "static") n.style.position = "relative";
+            n.style.top = `${-HTML2CANVAS_TEXT_LIFT_EM}em`;
           });
-          localUri = dest;
-        } else {
-          const { uri } = await FileSystem.downloadAsync(photoUrl, dest);
-          localUri = uri;
-        }
-      }
-      await MediaLibrary.createAssetAsync(localUri);
-      setSaveState("saved");
-    } catch {
-      setSaveState("error");
+        },
+      });
+      return canvas.toDataURL("image/jpeg", 0.92);
     }
-  };
-
-  const copyLink = async () => {
-    if (!item) return;
-    await Clipboard.setStringAsync(shareUrl);
-    setLinkCopied(true);
-    setTimeout(() => setLinkCopied(false), 1500);
+    return await captureRef(cardRef, {
+      format: "jpg",
+      quality: 0.92,
+      result,
+    });
   };
 
   const shareStory = async () => {
@@ -163,26 +164,8 @@ export default function ShareScreen() {
     setSharing(true);
     let shouldClose = false;
     try {
-      setExportingFlat(true);
-      // Let the corner-radius style change above actually paint before the
-      // view snapshot is taken — captureRef reads whatever's on screen at
-      // that instant.
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-
       if (Platform.OS === "web") {
-        // Same composited 9:16 story card the native branch below shares —
-        // this used to just re-fetch the raw photo instead, so what went
-        // out on web was the plain camera photo, not the actual story card
-        // (place/temp/mascot bubble) visible on screen.
-        const dataUri = await captureRef(cardRef, {
-          format: "jpg",
-          quality: 0.92,
-          result: "data-uri",
-        });
-        setExportingFlat(false);
-
-        const blob = await (await fetch(dataUri)).blob();
+        const blob = await (await fetch(await captureStory("data-uri"))).blob();
         const file = new File([blob], `mongle-catch-${item.id}.jpg`, {
           type: "image/jpeg",
         });
@@ -193,30 +176,29 @@ export default function ShareScreen() {
         };
 
         if (nav.share && nav.canShare?.({ files: [file] })) {
-          await nav.share({
-            title: "몽글 스토리",
-            text: `${item.cloud_name} · ${item.cloud_type}`,
-            files: [file],
-          });
+          try {
+            await nav.share({
+              title: "몽글 스토리",
+              text: `${item.cloud_name} · ${item.cloud_type}`,
+              files: [file],
+            });
+          } catch (e) {
+            // A closed share sheet is not an error. Anything else (notably
+            // NotAllowedError: building the image takes longer than the
+            // browser allows between the tap and the share call) falls back
+            // to a plain download so the image is never lost.
+            if ((e as Error)?.name !== "AbortError") {
+              downloadBlob(blob, `mongle-catch-${item.id}.jpg`);
+            }
+          }
         } else {
           // No Web Share file support (common on desktop browsers) — hand
-          // the story card to the browser's own download flow instead, so
-          // "export" still produces the card even without a share sheet.
-          const blobUrl = (globalThis as any).URL.createObjectURL(blob);
-          const doc = (globalThis as any).document;
-          const a = doc.createElement("a");
-          a.href = blobUrl;
-          a.download = `mongle-catch-${item.id}.jpg`;
-          doc.body.appendChild(a);
-          a.click();
-          a.remove();
-          (globalThis as any).URL.revokeObjectURL(blobUrl);
+          // the image to the browser's own download flow instead.
+          downloadBlob(blob, `mongle-catch-${item.id}.jpg`);
         }
         shouldClose = true;
       } else {
-        const uri = await captureRef(cardRef, { format: "jpg", quality: 0.92 });
-        setExportingFlat(false);
-
+        const uri = await captureStory("tmpfile");
         if (await Sharing.isAvailableAsync()) {
           await Sharing.shareAsync(uri, {
             dialogTitle: "몽글 스토리 공유하기",
@@ -224,10 +206,11 @@ export default function ShareScreen() {
           shouldClose = true;
         }
       }
-    } catch {
-      // best-effort — user cancelled or sharing isn't available.
+    } catch (e) {
+      // Best-effort — the user may simply have cancelled the share sheet — but
+      // keep the reason visible in dev so a real failure isn't invisible.
+      console.warn("[share] sharing the story image failed:", e);
     } finally {
-      setExportingFlat(false);
       setSharing(false);
       if (shouldClose) router.back();
     }
@@ -246,15 +229,14 @@ export default function ShareScreen() {
       </Pressable>
 
       <View style={{ marginHorizontal: rs(16), marginTop: rs(2) }}>
-        <ImageBackground
-          ref={cardRef}
-          source={photoUrl ? { uri: photoUrl } : PLACEHOLDER_PHOTO}
+        {/* The shell rounds and shadows the card on screen; the view inside it
+            (cardRef) stays square, so the exported image has no dark corners
+            and nothing on screen changes while it is captured. */}
+        <View
           style={{
             width: cardWidth,
             alignSelf: "center",
-            aspectRatio: 9 / 16,
-            borderRadius: exportingFlat ? 0 : rs(22),
-            overflow: "hidden",
+            borderRadius: 22 * (cardWidth / 300),
             shadowColor: glass.blue.shadow,
             shadowOpacity: 0.3,
             shadowRadius: rs(16),
@@ -262,215 +244,24 @@ export default function ShareScreen() {
             elevation: 4,
           }}
         >
-          <LinearGradient
-            pointerEvents="none"
-            colors={["rgba(20,30,36,0.05)", "rgba(20,30,36,0.55)"]}
-            style={StyleSheet.absoluteFill}
-          />
-
-          {!item && !loadError && (
-            <View
-              style={[
-                StyleSheet.absoluteFill,
-                { alignItems: "center", justifyContent: "center" },
-              ]}
-            >
-              <ActivityIndicator color="#fff" />
-            </View>
-          )}
-
-          <View style={{ position: "absolute", top: rs(13), left: rs(13) }}>
-            <Glass
-              tone={glass.white}
-              radius={rs(999)}
-              style={{ paddingHorizontal: rs(7), paddingVertical: rs(3) }}
-            >
-              <Text
-                className="font-semibold"
-                style={{ fontSize: rs(9), color: glass.ink }}
-              >
-                {item?.dex_no ?? "No.???"}
-              </Text>
-            </Glass>
-          </View>
-          <View style={{ position: "absolute", top: rs(13), right: rs(13) }}>
-            <Glass
-              tone={glass.white}
-              radius={rs(999)}
-              style={{
-                paddingHorizontal: rs(9),
-                paddingVertical: rs(4),
-                borderWidth: 1,
-                borderColor: glass.border,
-              }}
-            >
-              <Text
-                className="font-bold"
-                style={{ fontSize: rs(9), color: glass.ink }}
-              >
-                {item ? `${item.stars} ${item.rarity_label}` : "★☆☆ 일반"}
-              </Text>
-            </Glass>
-          </View>
-
           <View
             style={{
-              position: "absolute",
-              top: rs(52),
-              left: 0,
-              right: 0,
-              alignItems: "center",
+              borderRadius: 22 * (cardWidth / 300),
+              overflow: "hidden",
             }}
           >
-            <Text
-              className="font-semibold"
-              style={{ fontSize: rs(13), color: "#fff" }}
-            >
-              {item?.place_name ?? "위치 정보 없음"}
-            </Text>
-            <Text
-              className="font-bold"
-              style={{ fontSize: rs(50), color: "#fff", lineHeight: rs(55) }}
-            >
-              {item?.temp_c != null ? `${Math.round(item.temp_c)}°` : "--°"}
-            </Text>
-            <Text
-              className="font-semibold"
-              style={{ fontSize: rs(11), color: "#fff", opacity: 0.85 }}
-            >
-              {item
-                ? `${item.weather_condition ? `${item.weather_condition} · ` : ""}${formatCapturedAt(item.captured_at)}`
-                : ""}
-            </Text>
-            <Text
-              className="font-bold"
-              style={{ fontSize: rs(12), color: "#fff", marginTop: rs(8) }}
-            >
-              {item ? `${item.cloud_name} · ${item.cloud_type}` : ""}
-            </Text>
-          </View>
-
-          {/* Mascot sits right beside its own bubble now — chat-avatar +
-              bubble, so the caption reads as the cloud actually saying it,
-              not a caption floating near an unrelated centered character. */}
-          <View
-            style={{
-              position: "absolute",
-              bottom: rs(12),
-              left: rs(10),
-              right: rs(10),
-              flexDirection: "row",
-              alignItems: "flex-end",
-              gap: rs(5),
-            }}
-          >
-            <MongleMascot size={38} />
-            <View
-              style={{
-                backgroundColor: "#3C82F6",
-                borderRadius: rs(14),
-                borderBottomLeftRadius: rs(3),
-                paddingHorizontal: rs(10),
-                paddingVertical: rs(7),
-                marginBottom: rs(4),
-                flexShrink: 1,
-              }}
-            >
-              <Text
-                className="font-semibold"
-                style={{ fontSize: rs(10.5), color: "#fff" }}
-              >
-                {bubbleText}
-              </Text>
+            <View ref={cardRef} collapsable={false}>
+              <MessageCard
+                width={cardWidth}
+                recipient="mongle: 구름을 수집하는 방법"
+                sentText={item ? `${item.cloud_name} ☁️` : ""}
+                caption={caption}
+                photo={photoUrl ? { uri: photoUrl } : PLACEHOLDER_PHOTO}
+                loading={!item && !loadError}
+                meta={cardMeta}
+              />
             </View>
           </View>
-        </ImageBackground>
-
-        <View style={{ flexDirection: "row", gap: rs(9), marginTop: rs(14) }}>
-          <Pressable onPress={save} style={{ flex: 1 }} disabled={!item}>
-            <Glass
-              tone={glass.white}
-              radius={rs(12)}
-              style={{
-                alignItems: "center",
-                paddingVertical: rs(11),
-                borderWidth: 1,
-                borderColor: glass.border,
-                opacity: item ? 1 : 0.5,
-              }}
-            >
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: rs(6),
-                }}
-              >
-                <Ionicons
-                  name={
-                    saveState === "saved"
-                      ? "checkmark"
-                      : saveState === "error"
-                        ? "alert"
-                        : "download-outline"
-                  }
-                  size={rs(14)}
-                  color={glass.ink}
-                />
-                <Text
-                  style={{
-                    fontSize: rs(12),
-                    fontWeight: "600",
-                    color: glass.ink,
-                  }}
-                >
-                  {saveState === "saving"
-                    ? "저장 중…"
-                    : saveState === "saved"
-                      ? "저장됨"
-                      : saveState === "error"
-                        ? "저장 실패"
-                        : "저장"}
-                </Text>
-              </View>
-            </Glass>
-          </Pressable>
-          <Pressable style={{ flex: 1 }} onPress={copyLink} disabled={!item}>
-            <Glass
-              tone={glass.white}
-              radius={rs(12)}
-              style={{
-                alignItems: "center",
-                paddingVertical: rs(11),
-                borderWidth: 1,
-                borderColor: glass.border,
-                opacity: item ? 1 : 0.4,
-              }}
-            >
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: rs(6),
-                }}
-              >
-                <Ionicons
-                  name={linkCopied ? "checkmark" : "link-outline"}
-                  size={rs(14)}
-                  color={item ? glass.ink : glass.subMuted}
-                />
-                <Text
-                  style={{
-                    fontSize: rs(12),
-                    fontWeight: "600",
-                    color: item ? glass.ink : glass.subMuted,
-                  }}
-                >
-                  {linkCopied ? "복사됨" : "링크"}
-                </Text>
-              </View>
-            </Glass>
-          </Pressable>
         </View>
 
         <Pressable

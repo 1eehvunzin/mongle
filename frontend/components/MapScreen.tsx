@@ -1,15 +1,21 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
-import { useFocusEffect } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
-import { SafeAreaView } from "react-native-safe-area-context";
-import Glass from "./Glass";
+import "leaflet/dist/leaflet.css";
+import MapTopBar from "./MapTopBar";
+import MapSheet, { PANEL_HEIGHT } from "./MapSheet";
 import { glass } from "../constants/aquaTheme";
 import { rs } from "../constants/scale";
-import { CatchOut, getMapPins } from "../lib/localStore";
-import { ensureAccount } from "../lib/auth";
+import type { CatchOut } from "../lib/localStore";
+import { clusterHtml, clusterPins, PIN_SIZE, pinHtml } from "../lib/mapMeta";
+import { useMapData } from "../lib/useMapData";
 
-const DEFAULT_CENTER = { lat: 37.565, lng: 126.99 };
+const DEFAULT_CENTER: [number, number] = [37.565, 126.99];
+// Space the floating tab bar takes at the bottom (12 + 72, plus a gap); the
+// panel runs down behind it so the two read as one surface.
+const TAB_BAR_INSET = rs(12) + rs(72) + rs(10);
+// The map stops a little below the top of the panel (rounded
+// corners overlap it) so the tile attribution stays visible above the sheet.
+const MAP_BOTTOM = TAB_BAR_INSET + PANEL_HEIGHT - rs(24);
 
 // react-leaflet (and leaflet underneath it) touch `window` at module-load
 // time, not just at render time — fine in an actual browser, but this
@@ -19,20 +25,29 @@ const DEFAULT_CENTER = { lat: 37.565, lng: 126.99 };
 // every time, which is why the web deploy had never once succeeded.
 // Loaded dynamically after mount instead, so the import only ever runs in
 // the browser.
-type LeafletModule = typeof import("react-leaflet");
-let leafletModule: LeafletModule | null = null;
+//
+// The stylesheet is deliberately a plain static import above, NOT a dynamic
+// import() like the JS: in Metro's dev server an async CSS chunk is served as
+// `.../leaflet.bundle`, which collides with the sibling `leaflet.js` and
+// bundles the wrong file, so the page dies with "Requiring unknown module
+// <id>" as soon as the map tab opens. CSS has no `window` access, so a
+// static import is safe for the SSR/static-render pass.
+type ReactLeaflet = typeof import("react-leaflet");
+type LeafletNS = typeof import("leaflet");
+type Loaded = { rl: ReactLeaflet; L: LeafletNS };
+let loaded: Loaded | null = null;
 
-function useLeafletModule(): LeafletModule | null {
-  const [mod, setMod] = useState(leafletModule);
+function useLeaflet(): Loaded | null {
+  const [mod, setMod] = useState(loaded);
   useEffect(() => {
-    if (leafletModule) return;
+    if (loaded) return;
     let cancelled = false;
-    import("leaflet/dist/leaflet.css").then(() =>
-      import("react-leaflet").then((m) => {
+    Promise.all([import("react-leaflet"), import("leaflet")]).then(
+      ([rl, lf]) => {
         if (cancelled) return;
-        leafletModule = m;
-        setMod(m);
-      }),
+        loaded = { rl, L: ((lf as any).default ?? lf) as LeafletNS };
+        setMod(loaded);
+      },
     );
     return () => {
       cancelled = true;
@@ -41,54 +56,125 @@ function useLeafletModule(): LeafletModule | null {
   return mod;
 }
 
-function timeAgo(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
-  const min = Math.max(1, Math.floor(ms / 60000));
-  if (min < 60) return `${min}분 전`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}시간 전`;
-  return `${Math.floor(hr / 24)}일 전`;
+// Everything that needs the live Leaflet map instance: clustering by zoom,
+// fitting to the visible pins, flying to the selected pin, and the markers.
+function Layers({
+  rl,
+  L,
+  pins,
+  selectedId,
+  onSelect,
+}: {
+  rl: ReactLeaflet;
+  L: LeafletNS;
+  pins: CatchOut[];
+  selectedId: number | null;
+  onSelect: (pin: CatchOut) => void;
+}) {
+  const map = rl.useMap();
+  const [zoom, setZoom] = useState(map.getZoom());
+
+  // Mute the stock OSM tiles so the map sits in the app's soft palette
+  // instead of shouting over the pins.
+  useEffect(() => {
+    const pane = map.getPane("tilePane");
+    if (pane)
+      pane.style.filter = "saturate(0.35) brightness(1.05) contrast(0.92)";
+  }, [map]);
+  rl.useMapEvents({ zoomend: () => setZoom(map.getZoom()) });
+
+  // ~56px grid cells at the current zoom, so bubbles split as you zoom in.
+  const clusters = useMemo(
+    () => clusterPins(pins, (360 / Math.pow(2, zoom)) * (56 / 256)),
+    [pins, zoom],
+  );
+
+  // Refit whenever the set of visible pins changes (first load, species
+  // filter). Padding leaves room for the top chips and the bottom sheet.
+  const fitKey = pins.map((p) => p.id).join(",");
+  useEffect(() => {
+    if (pins.length === 0) return;
+    if (pins.length === 1) {
+      map.setView([pins[0].lat as number, pins[0].lng as number], 14);
+      return;
+    }
+    map.fitBounds(
+      pins.map((p) => [p.lat as number, p.lng as number] as [number, number]),
+      { paddingTopLeft: [40, 120], paddingBottomRight: [40, 50], maxZoom: 15 },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitKey]);
+
+  useEffect(() => {
+    const sel = pins.find((p) => p.id === selectedId);
+    if (!sel) return;
+    map.flyTo(
+      [sel.lat as number, sel.lng as number],
+      Math.max(map.getZoom(), 14),
+      {
+        duration: 0.6,
+      },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  return (
+    <>
+      {clusters.map((c) => {
+        const single = c.pins.length === 1;
+        const selected = single && c.pins[0].id === selectedId;
+        const size = single ? (selected ? PIN_SIZE.selected : PIN_SIZE.base) : PIN_SIZE.cluster;
+        const icon = L.divIcon({
+          html: single
+            ? pinHtml(c.rarity, selected)
+            : clusterHtml(c.pins.length),
+          className: "",
+          iconSize: [size, size],
+          iconAnchor: [size / 2, size / 2],
+        });
+        return (
+          <rl.Marker
+            key={c.key + (selected ? "-sel" : "")}
+            position={[c.lat, c.lng]}
+            icon={icon}
+            eventHandlers={{
+              click: () => {
+                // Catches at the exact same spot never split apart, so once
+                // zoomed in this far just pick the newest one in the bubble.
+                if (single || map.getZoom() >= 16) onSelect(c.pins[0]);
+                else
+                  map.flyTo([c.lat, c.lng], Math.min(map.getZoom() + 2, 17), {
+                    duration: 0.5,
+                  });
+              },
+            }}
+          />
+        );
+      })}
+    </>
+  );
 }
 
 export default function MapScreen() {
-  const [pins, setPins] = useState<CatchOut[]>([]);
-  const [loading, setLoading] = useState(true);
-  const leaflet = useLeafletModule();
-  const load = useCallback(async () => {
-    try {
-      await ensureAccount();
-      setPins(await getMapPins());
-    } catch {
-      // best-effort — keep whatever was last loaded, if anything.
-    }
-  }, []);
+  const leaflet = useLeaflet();
+  const {
+    pins,
+    loading,
+    species,
+    setSpecies,
+    speciesList,
+    visiblePins,
+    geoPins,
+    selectedId,
+    setSelectedId,
+  } = useMapData();
 
-  useFocusEffect(
-    useCallback(() => {
-      load().finally(() => setLoading(false));
-    }, [load]),
-  );
+  const initialCenter: [number, number] = geoPins.length
+    ? [geoPins[0].lat as number, geoPins[0].lng as number]
+    : DEFAULT_CENTER;
 
   return (
-    <SafeAreaView
-      style={{ flex: 1, backgroundColor: glass.bg }}
-      edges={["top"]}
-    >
-      <View
-        style={{
-          paddingHorizontal: rs(16),
-          paddingTop: rs(2),
-          paddingBottom: rs(6),
-        }}
-      >
-        <Text
-          className="font-bold"
-          style={{ fontSize: rs(24), color: glass.ink, letterSpacing: -0.3 }}
-        >
-          구름 지도
-        </Text>
-      </View>
-
+    <View style={{ flex: 1, backgroundColor: glass.bg }}>
       {loading ? (
         <View
           style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
@@ -114,53 +200,33 @@ export default function MapScreen() {
         <>
           <View
             style={{
-              marginHorizontal: rs(16),
-              height: rs(300),
-              borderRadius: rs(20),
-              overflow: "hidden",
-              borderWidth: 1,
-              borderColor: glass.border,
-              backgroundColor: glass.gray.top,
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: MAP_BOTTOM,
             }}
           >
             {leaflet ? (
-              <leaflet.MapContainer
-                center={[
-                  pins.find((pin) => pin.lat != null && pin.lng != null)
-                    ?.lat ?? DEFAULT_CENTER.lat,
-                  pins.find((pin) => pin.lat != null && pin.lng != null)
-                    ?.lng ?? DEFAULT_CENTER.lng,
-                ]}
+              <leaflet.rl.MapContainer
+                center={initialCenter}
                 zoom={12}
+                zoomControl={false}
                 style={{ width: "100%", height: "100%" }}
-                scrollWheelZoom
               >
-                <leaflet.TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                <leaflet.rl.TileLayer
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  maxZoom={19}
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                 />
-                {pins
-                  .filter((pin) => pin.lat != null && pin.lng != null)
-                  .map((pin) => (
-                    <leaflet.CircleMarker
-                      key={pin.id}
-                      center={[pin.lat as number, pin.lng as number]}
-                      radius={9}
-                      pathOptions={{
-                        color: "#244F5D",
-                        fillColor: "#8FC7D5",
-                        fillOpacity: 0.95,
-                        weight: 3,
-                      }}
-                    >
-                      <leaflet.Popup>
-                        <strong>{pin.cloud_name}</strong>
-                        <br />
-                        {pin.place_name ?? "위치 기록"}
-                      </leaflet.Popup>
-                    </leaflet.CircleMarker>
-                  ))}
-              </leaflet.MapContainer>
+                <Layers
+                  rl={leaflet.rl}
+                  L={leaflet.L}
+                  pins={geoPins}
+                  selectedId={selectedId}
+                  onSelect={(p) => setSelectedId(p.id)}
+                />
+              </leaflet.rl.MapContainer>
             ) : (
               <View
                 style={{
@@ -174,78 +240,21 @@ export default function MapScreen() {
             )}
           </View>
 
-          <Text
-            className="font-semibold"
-            style={{
-              fontSize: rs(11.5),
-              color: glass.subMuted,
-              marginHorizontal: rs(16),
-              marginTop: rs(16),
-              marginBottom: rs(7),
-            }}
-          >
-            내 최근 기록
-          </Text>
+          <MapTopBar
+            species={speciesList}
+            selected={species}
+            onSelect={setSpecies}
+          />
 
-          {/* A plain card, not Glass — Glass's top specular sheen covers ~48%
-              of its own height, which washes out text in the first row or two
-              of a tall list like this (fine on short buttons/pills, not here). */}
-          <View
-            style={{
-              marginHorizontal: rs(16),
-              borderRadius: rs(18),
-              backgroundColor: glass.white.top,
-              borderWidth: 1,
-              borderColor: glass.border,
-              overflow: "hidden",
-            }}
-          >
-            {pins.map((p, i) => (
-              <View
-                key={p.id}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: rs(12),
-                  padding: rs(12),
-                  borderBottomWidth: i === pins.length - 1 ? 0 : 1,
-                  borderBottomColor: glass.border,
-                }}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text
-                    className="font-semibold"
-                    style={{ fontSize: rs(13), color: glass.ink }}
-                  >
-                    {p.cloud_name}
-                  </Text>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: rs(3),
-                      marginTop: 2,
-                    }}
-                  >
-                    <Ionicons
-                      name="location"
-                      size={rs(10)}
-                      color={glass.subMuted}
-                    />
-                    <Text style={{ fontSize: rs(10.5), color: glass.subMuted }}>
-                      {p.place_name ?? "위치 정보 없음"} ·{" "}
-                      {timeAgo(p.captured_at)}
-                    </Text>
-                  </View>
-                </View>
-                <Text style={{ fontSize: rs(10.5), color: glass.subMuted }}>
-                  {p.stars}
-                </Text>
-              </View>
-            ))}
-          </View>
+          <MapSheet
+            pins={visiblePins}
+            selectedId={selectedId}
+            onSelect={(p) => setSelectedId(p.id)}
+            tabBarInset={TAB_BAR_INSET}
+            filterLabel={species}
+          />
         </>
       )}
-    </SafeAreaView>
+    </View>
   );
 }

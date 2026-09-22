@@ -14,16 +14,27 @@ export type CloudSpeciesDef = {
 export const KNOWN_CLOUDS: CloudSpeciesDef[] = [
   { name: "뭉게구름", type: "적운", rarityLabel: "일반", stars: 1 },
   { name: "새털구름", type: "권운", rarityLabel: "일반", stars: 1 },
-  { name: "양떼구름", type: "권적운", rarityLabel: "희귀", stars: 2 },
-  { name: "비늘구름", type: "고적운", rarityLabel: "희귀", stars: 2 },
+  { name: "양떼구름", type: "고적운", rarityLabel: "희귀", stars: 2 },
+  { name: "비늘구름", type: "권적운", rarityLabel: "희귀", stars: 2 },
   { name: "먹구름", type: "적란운", rarityLabel: "전설", stars: 3 },
   { name: "안개구름", type: "층운", rarityLabel: "일반", stars: 1 },
   { name: "렌즈구름", type: "렌즈운", rarityLabel: "전설", stars: 3 },
+  { name: "물결구름", type: "파상운", rarityLabel: "희귀", stars: 2 },
+  { name: "면사포구름", type: "권층운", rarityLabel: "희귀", stars: 2 },
+  { name: "높층구름", type: "고층운", rarityLabel: "일반", stars: 1 },
+  { name: "비구름", type: "난층운", rarityLabel: "희귀", stars: 2 },
+  { name: "층적구름", type: "층적운", rarityLabel: "일반", stars: 1 },
+  { name: "두루마리구름", type: "롤운", rarityLabel: "희귀", stars: 2 },
+  { name: "파도구름", type: "켈빈-헬름홀츠운", rarityLabel: "전설", stars: 3 },
+  { name: "모루구름", type: "철상운", rarityLabel: "전설", stars: 3 },
+  { name: "유방구름", type: "유방운", rarityLabel: "전설", stars: 3 },
+  { name: "무지개구름", type: "채운", rarityLabel: "전설", stars: 3 },
+  { name: "구름구멍", type: "운공", rarityLabel: "전설", stars: 3 },
+  { name: "야광운", type: "야광운", rarityLabel: "전설", stars: 3 },
 ];
 
-export const CLOUD_BY_NAME: Record<string, CloudSpeciesDef> = Object.fromEntries(
-  KNOWN_CLOUDS.map((c) => [c.name, c]),
-);
+export const CLOUD_BY_NAME: Record<string, CloudSpeciesDef> =
+  Object.fromEntries(KNOWN_CLOUDS.map((c) => [c.name, c]));
 
 const FINISH_ORDER: CloudTier[] = ["bronze", "silver", "gold", "holo"];
 
