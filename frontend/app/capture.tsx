@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   GestureResponderEvent,
   Image,
   KeyboardAvoidingView,
@@ -24,6 +25,7 @@ import { createCatch } from "../lib/localStore";
 import { drawHandoff } from "../lib/drawHandoff";
 
 type Phase = "camera" | "recognizing" | "result";
+type Mode = "recognize" | "shape";
 type Recognized = {
   name: string;
   type: string;
@@ -46,6 +48,10 @@ export default function CaptureScreen() {
   );
   const [todaySky, setTodaySky] = useState<TodaySkyOut | null>(null);
   const [registering, setRegistering] = useState(false);
+  // Chosen before the shutter is pressed — "인식" runs the usual GPT
+  // species flow, "모양구름" skips it entirely and goes straight to
+  // draw.tsx with the fresh photo, no recognition round-trip at all.
+  const [mode, setMode] = useState<Mode>("recognize");
 
   // Pinch-to-zoom — plain touch-event math instead of react-native-gesture-
   // handler: that package needs native linking, and this device can't
@@ -166,6 +172,23 @@ export default function CaptureScreen() {
     }
   }, [photoBase64]);
 
+  // Shared with the "구름에 그려서 모양 구름 만들기" button further down —
+  // both hand the same shape (photo + capture context) to draw.tsx, just
+  // reached from different points in the flow (before vs. after recognition).
+  const goDraw = (uri: string | null, base64: string | null) => {
+    if (!uri) return;
+    drawHandoff.pending = {
+      photoUri: uri,
+      photoBase64: base64,
+      placeName,
+      lat: coords?.lat ?? null,
+      lng: coords?.lng ?? null,
+      tempC: todaySky?.temp_c ?? null,
+      weatherCondition: todaySky?.condition ?? null,
+    };
+    router.push("/draw");
+  };
+
   const shoot = async () => {
     if (!cameraRef.current) return;
     try {
@@ -179,6 +202,14 @@ export default function CaptureScreen() {
         imageType: "jpg",
         quality: 0.7,
       });
+      if (mode === "shape") {
+        // No species recognition at all for this path — the photo goes
+        // straight to the drawing screen, this screen's own state (phase,
+        // photoUri/Base64) never changes, so backing out of draw.tsx lands
+        // right back on a live camera ready for another shot.
+        goDraw(photo?.uri ?? null, photo?.base64 ?? null);
+        return;
+      }
       setPhotoUri(photo?.uri ?? null);
       setPhotoBase64(photo?.base64 ?? null);
       attemptSend();
@@ -312,6 +343,33 @@ export default function CaptureScreen() {
             style={{ flex: 1 }}
             resizeMode="cover"
           />
+        )}
+
+        {phase === "camera" && !photoUri && (
+          <SafeAreaView
+            edges={["top"]}
+            pointerEvents="box-none"
+            style={{ position: "absolute", top: 0, left: 0, right: 0, alignItems: "center" }}
+          >
+            <Glass
+              tone={glass.white}
+              radius={rs(999)}
+              style={{ marginTop: rs(14), padding: rs(3), flexDirection: "row" }}
+            >
+              <ModeSegment
+                icon="sparkles"
+                label="인식 모드"
+                active={mode === "recognize"}
+                onPress={() => setMode("recognize")}
+              />
+              <ModeSegment
+                icon="brush-outline"
+                label="모양구름 모드"
+                active={mode === "shape"}
+                onPress={() => setMode("shape")}
+              />
+            </Glass>
+          </SafeAreaView>
         )}
 
         {phase !== "camera" && (
@@ -451,18 +509,7 @@ export default function CaptureScreen() {
 
         {phase === "result" && photoUri ? (
           <Pressable
-            onPress={() => {
-              drawHandoff.pending = {
-                photoUri,
-                photoBase64,
-                placeName,
-                lat: coords?.lat ?? null,
-                lng: coords?.lng ?? null,
-                tempC: todaySky?.temp_c ?? null,
-                weatherCondition: todaySky?.condition ?? null,
-              };
-              router.push("/draw");
-            }}
+            onPress={() => goDraw(photoUri, photoBase64)}
             style={{
               flexDirection: "row",
               alignItems: "center",
@@ -574,6 +621,75 @@ export default function CaptureScreen() {
         </View>
       </View>
     </KeyboardAvoidingView>
+  );
+}
+
+// One segment of the mode toggle: icon-only at rest, the label grows in
+// (width + fade, not a plain instant show) when it becomes the active one
+// and shrinks back to just the icon when it's deselected — the same
+// grow/shrink-a-pill-to-reveal-its-label move iOS uses for compact toggles,
+// rather than two permanently-labeled buttons sitting there the whole time.
+function ModeSegment({
+  icon,
+  label,
+  active,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  // React Native's own core Animated (JS-driven, no worklets/JSI) — not
+  // react-native-reanimated. Reanimated hooks evaluating on this screen's
+  // very first render crashed on device (this capture screen is still
+  // presenting as a modal at that point); core Animated has none of that
+  // native-runtime timing risk, at the cost of not running on the UI
+  // thread — completely fine for a toggle this small and infrequent.
+  const grow = useRef(new Animated.Value(active ? 1 : 0)).current;
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    Animated.timing(grow, {
+      toValue: active ? 1 : 0,
+      duration: 220,
+      useNativeDriver: false, // animating width/margin, not transform/opacity alone
+    }).start();
+  }, [active, grow]);
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        paddingHorizontal: rs(active ? 12 : 10),
+        paddingVertical: rs(8),
+        borderRadius: rs(999),
+        backgroundColor: active ? glass.ink : "transparent",
+      }}
+    >
+      <Ionicons name={icon} size={rs(15)} color={active ? "#FFFFFF" : glass.ink} />
+      <Animated.View
+        style={{
+          overflow: "hidden",
+          maxWidth: grow.interpolate({ inputRange: [0, 1], outputRange: [0, rs(110)] }),
+          opacity: grow,
+          marginLeft: grow.interpolate({ inputRange: [0, 1], outputRange: [0, rs(6)] }),
+        }}
+      >
+        <Text
+          className="font-bold"
+          numberOfLines={1}
+          style={{ fontSize: rs(11.5), color: "#FFFFFF" }}
+        >
+          {label}
+        </Text>
+      </Animated.View>
+    </Pressable>
   );
 }
 

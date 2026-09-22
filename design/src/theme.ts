@@ -26,7 +26,15 @@ export const sys = {
   subMuted: "#8B897F",
   blue: "#5670B0",
   blueTint: "#E4E9F5",
-  blueGradient: ["#6C85C0", "#5670B0"] as const,
+  // A genuine sky blue (cyan-leaning), not the periwinkle/indigo this was
+  // before — matches assets/ref/image.png's own cover background (paler
+  // near the top, deepening toward the bottom), and the darker stop is
+  // glass.accent verbatim (the app's own real text/icon accent blue), not
+  // an invented hue. Kept short of actual white at the top — the wordmark
+  // and subtitle sit up there in solid white, and this gradient runs at
+  // 160deg (top-left toward bottom-right), so the top stop is close to
+  // where that text actually is.
+  blueGradient: ["#A3DBF4", "#3D7F97"] as const,
   common: "#5670B0",
   rare: "#7558B0",
   legendary: "#805E1D",

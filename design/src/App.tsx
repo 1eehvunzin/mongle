@@ -1,12 +1,14 @@
 import Panel from "./components/Panel";
 import PhoneFrame, { getScreenSize } from "./components/PhoneFrame";
 import ScreenScale from "./components/ScreenScale";
+import FloatingBubbles from "./components/FloatingBubbles";
 import { sys, COVER_GRADIENT } from "./theme";
 import { CANVAS_H, CANVAS_W, PANEL_W } from "./layout";
 
 import HomeScreen from "./sections/HomeScreen";
 import FeedScreen from "./sections/FeedScreen";
 import RecognitionScreen from "./sections/RecognitionScreen";
+import ShapeCloudScreen from "./sections/ShapeCloudScreen";
 import ShareScreen from "./sections/ShareScreen";
 import MapScreen from "./sections/MapScreen";
 import StreakScreen from "./sections/StreakScreen";
@@ -15,7 +17,10 @@ import StreakScreen from "./sections/StreakScreen";
 // one saturated cover panel with the wordmark, then plain-white screenshot
 // panels — a short bold caption up top, the real phone straight (no tilt,
 // no card, no badges) filling almost the whole frame and cropped at the
-// bottom edge. A matching closing panel bookends the cover (수미상관).
+// bottom edge. A matching closing panel bookends the cover (수미상관). The
+// cover/closing panels' floating bubble accents are a second reference
+// (assets/ref/image.png, an earlier promo still) layered onto the same
+// simple.jpg structure, not a replacement for it.
 const CAPTION_TOP = 130;
 const STAGE_TOP = 420;
 
@@ -47,6 +52,7 @@ export default function App() {
             overflow: "hidden",
           }}
         >
+          <FloatingBubbles width={PANEL_W} height={CANVAS_H} />
           <div
             style={{
               position: "absolute",
@@ -95,6 +101,10 @@ export default function App() {
         <RecognitionScreen />
       </StraightPanel>
 
+      <StraightPanel prefix="손끝으로 그려서" emphasis="나만의 구름 완성">
+        <ShapeCloudScreen />
+      </StraightPanel>
+
       <StraightPanel prefix="예쁜 하늘은" emphasis="바로 공유해요">
         <ShareScreen />
       </StraightPanel>
@@ -103,7 +113,7 @@ export default function App() {
         <MapScreen />
       </StraightPanel>
 
-      {/* ===== 6. CLOSING (bookends the cover, features the 나 screen) ===== */}
+      {/* ===== 7. CLOSING (bookends the cover, features the 나 screen) ===== */}
       <Panel>
         <div
           style={{
@@ -113,6 +123,7 @@ export default function App() {
             overflow: "hidden",
           }}
         >
+          <FloatingBubbles width={PANEL_W} height={CANVAS_H} />
           {/* Mirrors the cover's bottom-right phone: same treatment, tilted
               the other way, showing the 나(profile) screen instead of home —
               a 수미상관 bookend, not a repeat of the opener. Sized so growth
@@ -185,11 +196,32 @@ const stageScreen = getScreenSize(STAGE_W, STAGE_H);
 function StraightPanel({ prefix, emphasis, children }: { prefix: string; emphasis: string; children: React.ReactNode }) {
   return (
     <Panel>
+      {/* Plain white, per the original simple.jpg direction — only the
+          cover/closing bookends get the saturated gradient + bubbles. */}
       <div style={{ position: "absolute", top: CAPTION_TOP, left: 40, right: 40, textAlign: "center" }}>
-        <div style={{ fontSize: 104, fontWeight: 700, color: sys.ink, lineHeight: 1.16, letterSpacing: "-0.02em" }}>
+        {/* Two-tier type: a small, quieter lead-in line, then the actual
+            payoff line at real headline size — this used to be one fontSize
+            for both (weight/color were the only difference), which read as
+            flat/samey. Ported from the same hierarchy assets/ref/image.png's
+            own cover caption already uses (small line, then a much bigger
+            one under it). Color-wise the big line carries the weight (near-
+            black, like body copy would); the small lead-in uses glass.accent
+            (via EMPHASIS_COLOR = COVER_GRADIENT[1]) — the same real text/
+            icon accent blue the app itself uses, not an invented tint. */}
+        <div style={{ fontSize: 52, fontWeight: 700, color: EMPHASIS_COLOR, letterSpacing: "-0.01em" }}>
           {prefix}
-          <br />
-          <span style={{ fontWeight: 800, color: EMPHASIS_COLOR }}>{emphasis}</span>
+        </div>
+        <div
+          style={{
+            fontSize: 124,
+            fontWeight: 800,
+            color: sys.ink,
+            lineHeight: 1.1,
+            letterSpacing: "-0.02em",
+            marginTop: 14,
+          }}
+        >
+          {emphasis}
         </div>
       </div>
       <PhoneFrame width={STAGE_W} height={STAGE_H} rotateDeg={0} style={{ left: (PANEL_W - STAGE_W) / 2, top: STAGE_TOP }}>

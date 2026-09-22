@@ -2,6 +2,7 @@ import "../global.css";
 import { useEffect } from "react";
 import { useFonts } from "expo-font";
 import { Stack, usePathname } from "expo-router";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
@@ -100,40 +101,52 @@ function RootLayout() {
     return <View className="flex-1 bg-bg" />;
   }
 
+  // react-native-gesture-handler needs this at (or above) the root for its
+  // gestures to work at all — used by draw.tsx's drawing canvas.
   const app = (
-    <SafeAreaProvider>
-      <StatusBar style="dark" />
-      {posthogApiKey ? <AnalyticsScreenTracker /> : null}
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" />
-        {/* No _layout.tsx inside app/(onboarding)/, so expo-router (as of
-            SDK 57) flattens its one screen to this nested name instead of
-            resolving the bare group name — declaring the group itself here
-            logged a "no route named (onboarding)" warning on every render. */}
-        <Stack.Screen name="(onboarding)/splash" />
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="capture" options={{ presentation: "modal" }} />
-        <Stack.Screen name="draw" options={{ presentation: "modal" }} />
-        <Stack.Screen
-          name="consent"
-          options={{ presentation: "transparentModal", animation: "fade" }}
-        />
-        <Stack.Screen
-          name="nickname"
-          options={{ presentation: "transparentModal", animation: "fade" }}
-        />
-        <Stack.Screen
-          name="login-onboarding"
-          options={{ presentation: "transparentModal", animation: "fade" }}
-        />
-        <Stack.Screen
-          name="notification-ask"
-          options={{ presentation: "transparentModal", animation: "fade" }}
-        />
-        <Stack.Screen name="share" />
-        <Stack.Screen name="support" />
-      </Stack>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        {posthogApiKey ? <AnalyticsScreenTracker /> : null}
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" />
+          {/* No _layout.tsx inside app/(onboarding)/, so expo-router (as of
+              SDK 57) flattens its one screen to this nested name instead of
+              resolving the bare group name — declaring the group itself here
+              logged a "no route named (onboarding)" warning on every render. */}
+          <Stack.Screen name="(onboarding)/splash" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="capture" options={{ presentation: "modal" }} />
+          {/* gestureEnabled: false — the modal's own swipe-to-dismiss
+              recognizer otherwise competes with the drawing canvas's own
+              drag-to-draw gesture for the same touch, which is what made
+              strokes cut short / the canvas itself feel like it was "moving"
+              mid-draw on a real device. */}
+          <Stack.Screen
+            name="draw"
+            options={{ presentation: "modal", gestureEnabled: false }}
+          />
+          <Stack.Screen
+            name="consent"
+            options={{ presentation: "transparentModal", animation: "fade" }}
+          />
+          <Stack.Screen
+            name="nickname"
+            options={{ presentation: "transparentModal", animation: "fade" }}
+          />
+          <Stack.Screen
+            name="login-onboarding"
+            options={{ presentation: "transparentModal", animation: "fade" }}
+          />
+          <Stack.Screen
+            name="notification-ask"
+            options={{ presentation: "transparentModal", animation: "fade" }}
+          />
+          <Stack.Screen name="share" />
+          <Stack.Screen name="support" />
+        </Stack>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 
   return posthogApiKey ? (

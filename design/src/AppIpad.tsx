@@ -1,17 +1,19 @@
 import Panel from "./components/Panel";
 import IpadFrame, { getIpadScreenSize } from "./components/IpadFrame";
 import IpadScreenContent from "./components/IpadScreenContent";
+import FloatingBubbles from "./components/FloatingBubbles";
 import { sys, COVER_GRADIENT } from "./theme";
 import { CANVAS_H, CANVAS_W, PANEL_W, PANEL_H } from "./ipadLayout";
 
 import HomeScreen from "./sections/HomeScreen";
 import FeedScreen from "./sections/FeedScreen";
 import RecognitionScreen from "./sections/RecognitionScreen";
+import ShapeCloudScreen from "./sections/ShapeCloudScreen";
 import ShareScreen from "./sections/ShareScreen";
 import MapScreen from "./sections/MapScreen";
 import StreakScreen from "./sections/StreakScreen";
 
-// iPad (12.9"/13") App Store screenshot set — same 6 marketing beats as
+// iPad (12.9"/13") App Store screenshot set — same marketing beats as
 // App.tsx, but showing an actual iPad-shaped device mockup (IpadFrame)
 // instead of the iPhone bezel. The app has no iPad-specific UI, so each
 // frame's screen area shows the same phone-shaped screen centered with
@@ -60,6 +62,7 @@ export default function AppIpad() {
             overflow: "hidden",
           }}
         >
+          <FloatingBubbles width={PANEL_W} height={PANEL_H} />
           <div style={{ position: "absolute", top: 90, left: 100, fontFamily: "Cloudsofa", fontSize: 210, color: "#FFFFFF", lineHeight: 1, letterSpacing: "-0.01em" }}>
             mongle
           </div>
@@ -84,6 +87,10 @@ export default function AppIpad() {
         <RecognitionScreen />
       </StraightPanel>
 
+      <StraightPanel prefix="손끝으로 그려서" emphasis="나만의 구름 완성">
+        <ShapeCloudScreen />
+      </StraightPanel>
+
       <StraightPanel prefix="예쁜 하늘은" emphasis="바로 공유해요">
         <ShareScreen />
       </StraightPanel>
@@ -92,7 +99,7 @@ export default function AppIpad() {
         <MapScreen />
       </StraightPanel>
 
-      {/* ===== 6. CLOSING (bookends the cover, features the 나 screen) ===== */}
+      {/* ===== 7. CLOSING (bookends the cover, features the 나 screen) ===== */}
       <Panel width={PANEL_W} height={PANEL_H}>
         <div
           style={{
@@ -102,6 +109,7 @@ export default function AppIpad() {
             overflow: "hidden",
           }}
         >
+          <FloatingBubbles width={PANEL_W} height={PANEL_H} />
           <IpadFrame width={COVER_W} height={COVER_H} rotateDeg={6} style={{ left: -220, top: PANEL_H - COVER_H - 60 }}>
             <IpadScreenContent width={coverScreen.width} height={coverScreen.height}>
               <StreakScreen />
@@ -144,10 +152,24 @@ function StraightPanel({ prefix, emphasis, children }: { prefix: string; emphasi
   return (
     <Panel width={PANEL_W} height={PANEL_H}>
       <div style={{ position: "absolute", top: CAPTION_TOP, left: 60, right: 60, textAlign: "center" }}>
-        <div style={{ fontSize: 100, fontWeight: 700, color: sys.ink, lineHeight: 1.2, letterSpacing: "-0.02em" }}>
+        {/* Same two-tier hierarchy + coloring as App.tsx's StraightPanel —
+            see its comment. Plain white background, per the original
+            simple.jpg direction; only the cover/closing bookends get the
+            gradient + bubbles. */}
+        <div style={{ fontSize: 48, fontWeight: 700, color: EMPHASIS_COLOR, letterSpacing: "-0.01em" }}>
           {prefix}
-          <br />
-          <span style={{ fontWeight: 800, color: EMPHASIS_COLOR }}>{emphasis}</span>
+        </div>
+        <div
+          style={{
+            fontSize: 118,
+            fontWeight: 800,
+            color: sys.ink,
+            lineHeight: 1.12,
+            letterSpacing: "-0.02em",
+            marginTop: 16,
+          }}
+        >
+          {emphasis}
         </div>
       </div>
       <IpadFrame width={STAGE_W} height={STAGE_H} rotateDeg={0} style={{ left: STAGE_LEFT, top: STAGE_TOP }}>

@@ -15,16 +15,17 @@ const NAMES = [
   "1-cover",
   "2-feed",
   "3-recognition",
-  "4-share",
-  "5-map",
-  "6-closing",
+  "4-shape",
+  "5-share",
+  "6-map",
+  "7-closing",
 ];
 
 mkdirSync(OUT_DIR, { recursive: true });
 
 const browser = await chromium.launch();
 const page = await browser.newPage({
-  viewport: { width: 7704, height: 2778 },
+  viewport: { width: 1284 * NAMES.length, height: 2778 },
   deviceScaleFactor: 1,
 });
 await page.goto(URL, { waitUntil: "networkidle" });

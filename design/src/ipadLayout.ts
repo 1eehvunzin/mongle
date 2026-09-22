@@ -5,6 +5,6 @@
 // layout.ts's iPhone canvas but at the iPad's own (much wider) proportions.
 export const PANEL_W = 2048;
 export const PANEL_H = 2732;
-export const PANEL_COUNT = 6;
+export const PANEL_COUNT = 7;
 export const CANVAS_W = PANEL_W * PANEL_COUNT;
 export const CANVAS_H = PANEL_H;

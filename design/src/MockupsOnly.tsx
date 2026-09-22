@@ -4,6 +4,7 @@ import ScreenScale from "./components/ScreenScale";
 import HomeScreen from "./sections/HomeScreen";
 import FeedScreen from "./sections/FeedScreen";
 import RecognitionScreen from "./sections/RecognitionScreen";
+import ShapeCloudScreen from "./sections/ShapeCloudScreen";
 import ShareScreen from "./sections/ShareScreen";
 import MapScreen from "./sections/MapScreen";
 import StreakScreen from "./sections/StreakScreen";
@@ -20,6 +21,7 @@ export const MOCKUPS = [
   { name: "home", Screen: HomeScreen },
   { name: "feed", Screen: FeedScreen },
   { name: "recognition", Screen: RecognitionScreen },
+  { name: "shape", Screen: ShapeCloudScreen },
   { name: "share", Screen: ShareScreen },
   { name: "map", Screen: MapScreen },
   { name: "streak", Screen: StreakScreen },

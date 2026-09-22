@@ -1,6 +1,7 @@
 // Pure filtering / folder-grouping over the feed's catch list, so
 // the feed screen only has to hold UI state.
 import type { CatchOut } from "./localStore";
+import { isShapeCloud, SHAPE_GROUP_LABEL } from "./shapeClouds";
 
 export type FolderGroup = "species" | "rarity" | "month" | "place";
 
@@ -12,6 +13,14 @@ export type Folder = { key: string; label: string; items: CatchOut[] };
 
 const RARITY_RANK: Record<string, number> = { 일반: 0, 희귀: 1, 전설: 2 };
 const NO_PLACE = "위치 정보 없음";
+
+// The "종류" tab's species grouping normally keys a folder by cloud_name —
+// which would otherwise scatter shape clouds across the grid as one folder
+// per drawn shape ("하트구름", "토끼구름", …), diluting the real-species
+// list with one-off/custom names. Every shape cloud collapses into this one
+// folder instead, pinned first regardless of count — opening it shows all
+// of them as a flat list, same as any other folder.
+const SHAPE_FOLDER_KEY = "__shape__";
 
 export function applyFilters(items: CatchOut[], f: FeedFilters): CatchOut[] {
   const q = f.query.trim().toLowerCase();
@@ -39,6 +48,9 @@ function folderOf(
 ): { key: string; label: string } {
   switch (by) {
     case "species":
+      if (isShapeCloud(item.cloud_type)) {
+        return { key: SHAPE_FOLDER_KEY, label: SHAPE_GROUP_LABEL };
+      }
       return { key: item.cloud_name, label: item.cloud_name };
     case "rarity":
       return { key: item.rarity_label, label: item.rarity_label };
@@ -63,6 +75,10 @@ export function groupItems(items: CatchOut[], by: FolderGroup): Folder[] {
   }
   const folders = [...map.values()];
   folders.sort((a, b) => {
+    if (by === "species") {
+      if (a.key === SHAPE_FOLDER_KEY) return -1;
+      if (b.key === SHAPE_FOLDER_KEY) return 1;
+    }
     if (by === "rarity")
       return (RARITY_RANK[b.key] ?? 0) - (RARITY_RANK[a.key] ?? 0);
     if (by === "month") return b.key.localeCompare(a.key);

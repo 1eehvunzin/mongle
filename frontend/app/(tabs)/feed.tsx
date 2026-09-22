@@ -24,7 +24,6 @@ import { rs } from "../../constants/scale";
 import { CatchOut, getFeed } from "../../lib/localStore";
 import { ensureAccount } from "../../lib/auth";
 import { applyFilters, FolderGroup, groupItems } from "../../lib/feedFilters";
-import { isShapeCloud } from "../../lib/shapeClouds";
 
 // Fallback art for catches saved without a photo — keyed loosely by species
 // so the card still reads as "that kind of cloud" instead of a blank tile.
@@ -300,14 +299,10 @@ export default function FeedScreen() {
     () => applyFilters(items, { query: activeQuery }),
     [items, activeQuery],
   );
-  const folders = useMemo(() => {
-    if (group === "all") return [];
-    // "모양 구름" isn't a FolderGroup dimension of its own — it's the same
-    // species-style folder-by-name grouping, just narrowed to shape-cloud
-    // catches first (each shape's name is its own folder, e.g. "하트구름").
-    const base = group === "shape" ? searched.filter((i) => isShapeCloud(i.cloud_type)) : searched;
-    return groupItems(base, group === "shape" ? "species" : group);
-  }, [searched, group]);
+  const folders = useMemo(
+    () => (group === "all" ? [] : groupItems(searched, group)),
+    [searched, group],
+  );
   const currentFolder = openFolder
     ? (folders.find((f) => f.key === openFolder) ?? null)
     : null;

@@ -16,7 +16,7 @@ mkdirSync(OUT_DIR, { recursive: true });
 
 const browser = await chromium.launch();
 const page = await browser.newPage({
-  viewport: { width: MOCKUP_W * 6, height: MOCKUP_H },
+  viewport: { width: MOCKUP_W * 7, height: MOCKUP_H },
   deviceScaleFactor: 1,
 });
 await page.goto(`${URL}?view=mockups`, { waitUntil: "networkidle" });

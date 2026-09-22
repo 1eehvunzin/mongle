@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  GestureResponderEvent,
   Image,
   InteractionManager,
   Platform,
@@ -14,7 +13,8 @@ import {
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Canvas, Path, Skia } from "@shopify/react-native-skia";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Svg, { Path } from "react-native-svg";
 import { captureRef } from "react-native-view-shot";
 import Glass from "../components/Glass";
 import { glass } from "../constants/aquaTheme";
@@ -27,66 +27,45 @@ import {
   shapeCloudName,
 } from "../lib/shapeClouds";
 
-// Fixed brush — no color picker, per RETENTION_DISCOVERY.md §E: a cream,
-// colored-pencil-ish stroke with a pale blue-gray halo underneath it, since
-// a cream line alone disappears against bright cloud/sky (the doc's own
-// flagged visibility risk). This has NOT been checked on a real device —
-// @shopify/react-native-skia is a native module, so this whole screen only
-// runs after a new dev-client/EAS build; see the note in capture.tsx.
-const BRUSH = "#FFF3D6";
-const HALO = "#6C828C";
+// Fixed brush — no color picker: a slightly transparent white dashed
+// stroke. (Went through a colored-pencil-texture version first — jitter +
+// dash layers, per RETENTION_DISCOVERY.md §E's original "미색 색연필"
+// direction — but that read as fussy rather than better; this is simpler
+// and was the direct ask.) react-native-svg + react-native-gesture-handler
+// (not Skia — see git history for why) are both in Expo Go's bundled native
+// modules and both work on web, so this screen runs everywhere without a
+// custom dev-client build.
+const BRUSH = "#FFFFFF";
 
 type Point = { x: number; y: number };
 type Step = "draw" | "name";
 
-function toSkPath(points: Point[]) {
-  const path = Skia.Path.Make();
-  if (points.length === 0) return path;
-  path.moveTo(points[0].x, points[0].y);
-  for (let i = 1; i < points.length; i++) {
-    path.lineTo(points[i].x, points[i].y);
-  }
-  return path;
+function toSvgPath(points: Point[]): string {
+  if (points.length === 0) return "";
+  let d = `M${points[0].x} ${points[0].y}`;
+  for (let i = 1; i < points.length; i++) d += ` L${points[i].x} ${points[i].y}`;
+  return d;
 }
 
-// One stroke, drawn three times (a wide pale halo underneath, then two
-// slightly offset cream passes) — the closest a flat Skia fill gets to a
-// colored pencil's layered, slightly-off-register look without a real
-// per-point jitter/grain shader.
 function StrokeLayer({ points }: { points: Point[] }) {
-  const path = useMemo(() => toSkPath(points), [points]);
   if (points.length < 2) return null;
   return (
-    <>
-      <Path
-        path={path}
-        color={HALO}
-        style="stroke"
-        strokeWidth={22}
-        strokeCap="round"
-        strokeJoin="round"
-        opacity={0.28}
-      />
-      <Path
-        path={path}
-        color={BRUSH}
-        style="stroke"
-        strokeWidth={13}
-        strokeCap="round"
-        strokeJoin="round"
-        opacity={0.55}
-      />
-      <Path
-        path={path}
-        color={BRUSH}
-        style="stroke"
-        strokeWidth={9}
-        strokeCap="round"
-        strokeJoin="round"
-        opacity={0.5}
-        transform={[{ translateX: 1.5 }, { translateY: 1 }]}
-      />
-    </>
+    <Path
+      d={toSvgPath(points)}
+      stroke={BRUSH}
+      strokeWidth={10}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+      opacity={0.78}
+      // A round line cap draws a half-circle (radius = strokeWidth/2) past
+      // each dash's actual endpoint, so at strokeWidth 10 the two caps
+      // facing a gap eat ~10px into it from both sides — the "6,5" this
+      // started as had a nominal 5px gap that was fully swallowed, which is
+      // exactly why it first read as a solid line. The gap needs to clear
+      // the stroke width before it reads as a gap at all.
+      strokeDasharray="16,20"
+    />
   );
 }
 
@@ -100,13 +79,13 @@ export default function DrawScreen() {
     drawHandoff.pending = null;
     if (ctxRef.current) return;
     // A direct/refreshed load of this route (no push from capture.tsx, so
-    // nothing pending) has no navigation history to go back to — router.back()
-    // there throws "Attempted to navigate before mounting the Root Layout
-    // component" since the root Stack hasn't finished mounting yet on a
-    // cold load. Deferred past the current interaction/frame (the same
-    // InteractionManager pattern this app already uses everywhere else for
-    // a mount-time router call — see home.tsx) and routed to a real screen
-    // instead of back() when there's nothing to go back to.
+    // nothing pending) has no navigation history to go back to —
+    // router.back() there throws "Attempted to navigate before mounting the
+    // Root Layout component" since the root Stack hasn't finished mounting
+    // yet on a cold load. Deferred past the current interaction/frame (the
+    // same InteractionManager pattern this app already uses everywhere else
+    // for a mount-time router call — see home.tsx) and routed to a real
+    // screen instead of back() when there's nothing to go back to.
     InteractionManager.runAfterInteractions(() => {
       if (router.canGoBack()) router.back();
       else router.replace("/home");
@@ -122,68 +101,27 @@ export default function DrawScreen() {
   const [saving, setSaving] = useState(false);
   const canvasRef = useRef<View>(null);
 
-  if (!ctx) return null;
-
-  // Web is intentionally unsupported for the drawing canvas itself — not a
-  // capability gap, a safety one. @shopify/react-native-skia's web target
-  // needs its CanvasKit (WASM) runtime loaded before any <Canvas>/<Path>
-  // mounts, but this app's web build is server-rendered (app.json's
-  // web.output: "server"): any route whose render reaches a live Skia call
-  // during that Node-side pass crashes the whole render server for every
-  // visitor, not just this screen — confirmed the hard way with a throwaway
-  // test route. Keeping this branch ahead of anything Skia-touching is what
-  // makes that impossible regardless of platform/SSR edge cases, matching
-  // RETENTION_DISCOVERY.md §E5's own fallback ("웹은 '모바일에서 그리기
-  // 가능' 안내로 제한") — revisit if this ever moves off SSR output.
-  if (Platform.OS === "web") {
-    return (
-      <View style={{ flex: 1, backgroundColor: "#000" }}>
-        <Image
-          source={{ uri: ctx.photoUri }}
-          style={StyleSheet.absoluteFill}
-          resizeMode="cover"
-        />
-        <View
-          style={[
-            StyleSheet.absoluteFill,
-            { backgroundColor: "rgba(0,0,0,0.55)", alignItems: "center", justifyContent: "center", padding: rs(30) },
-          ]}
-        >
-          <Ionicons name="brush-outline" size={rs(34)} color="#FFFFFF" />
-          <Text
-            className="font-bold"
-            style={{ fontSize: rs(15), color: "#FFFFFF", textAlign: "center", marginTop: rs(14) }}
-          >
-            모양 구름 그리기는{"\n"}아직 앱에서만 할 수 있어요
-          </Text>
-          <Pressable onPress={() => router.back()} style={{ marginTop: rs(22) }}>
-            <Glass tone={glass.white} radius={rs(999)} style={{ paddingHorizontal: rs(22), paddingVertical: rs(12) }}>
-              <Text className="font-bold" style={{ fontSize: rs(13), color: glass.ink }}>
-                돌아가기
-              </Text>
-            </Glass>
-          </Pressable>
-        </View>
-      </View>
-    );
-  }
-
-  const onTouchStart = (e: GestureResponderEvent) => {
-    const { locationX, locationY } = e.nativeEvent;
-    setCurrent([{ x: locationX, y: locationY }]);
-  };
-  const onTouchMove = (e: GestureResponderEvent) => {
-    const { locationX, locationY } = e.nativeEvent;
-    setCurrent((prev) =>
-      prev ? [...prev, { x: locationX, y: locationY }] : prev,
-    );
-  };
-  const onTouchEnd = () => {
-    setCurrent((prev) => {
-      if (prev && prev.length > 1) setStrokes((all) => [...all, prev]);
-      return null;
+  // .runOnJS(true) — these just call plain setState, no reanimated worklets
+  // needed, and it sidesteps any question of whether state updates are safe
+  // to make from a UI-thread worklet at all.
+  const pan = Gesture.Pan()
+    .runOnJS(true)
+    .onBegin((e) => {
+      if (step !== "draw") return;
+      setCurrent([{ x: e.x, y: e.y }]);
+    })
+    .onUpdate((e) => {
+      if (step !== "draw") return;
+      setCurrent((prev) => (prev ? [...prev, { x: e.x, y: e.y }] : prev));
+    })
+    .onEnd(() => {
+      setCurrent((prev) => {
+        if (prev && prev.length > 1) setStrokes((all) => [...all, prev]);
+        return null;
+      });
     });
-  };
+
+  if (!ctx) return null;
 
   const undo = () => setStrokes((all) => all.slice(0, -1));
 
@@ -241,17 +179,16 @@ export default function DrawScreen() {
           style={StyleSheet.absoluteFill}
           resizeMode="cover"
         />
-        <Canvas
-          style={StyleSheet.absoluteFill}
-          onTouchStart={step === "draw" ? onTouchStart : undefined}
-          onTouchMove={step === "draw" ? onTouchMove : undefined}
-          onTouchEnd={step === "draw" ? onTouchEnd : undefined}
-        >
-          {strokes.map((s, i) => (
-            <StrokeLayer key={i} points={s} />
-          ))}
-          {current ? <StrokeLayer points={current} /> : null}
-        </Canvas>
+        <GestureDetector gesture={pan}>
+          <View style={StyleSheet.absoluteFill}>
+            <Svg width="100%" height="100%">
+              {strokes.map((s, i) => (
+                <StrokeLayer key={i} points={s} />
+              ))}
+              {current ? <StrokeLayer points={current} /> : null}
+            </Svg>
+          </View>
+        </GestureDetector>
       </View>
 
       <SafeAreaView
@@ -279,7 +216,7 @@ export default function DrawScreen() {
           </Pressable>
           {step === "draw" ? (
             <Text className="font-bold" style={{ fontSize: rs(13), color: "#FFFFFF" }}>
-              구름에 그려보세요
+              구름 모양을 따라 표시해보세요
             </Text>
           ) : (
             <View />

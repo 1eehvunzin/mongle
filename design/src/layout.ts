@@ -3,6 +3,6 @@
 // marketing beat (page count isn't fixed).
 export const PANEL_W = 1284;
 export const PANEL_H = 2778;
-export const PANEL_COUNT = 6;
+export const PANEL_COUNT = 7;
 export const CANVAS_W = PANEL_W * PANEL_COUNT;
 export const CANVAS_H = PANEL_H;

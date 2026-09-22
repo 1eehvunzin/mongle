@@ -9,6 +9,12 @@
 // reads right here — this isn't part of the numbered dex).
 export const SHAPE_CLOUD_TYPE = "모양 구름";
 
+// Shared display label for "all shape clouds, grouped as one" — the feed's
+// 종류 folder grid and the map's species filter chips both collapse every
+// shape cloud (however it was individually named) behind this one label
+// instead of listing "하트구름"/"토끼구름"/… separately.
+export const SHAPE_GROUP_LABEL = "모양 구름";
+
 // Collection unit definition (the "leap of faith" decision in the discovery
 // doc): free drawing alone isn't a collectible, it's a doodle. Picking a
 // name from this preset list is the "official" version of a shape — typing

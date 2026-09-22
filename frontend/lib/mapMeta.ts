@@ -3,6 +3,7 @@
 // discovery counts.
 import { glass, GlassTone } from "../constants/aquaTheme";
 import type { CatchOut } from "./localStore";
+import { isShapeCloud, SHAPE_GROUP_LABEL } from "./shapeClouds";
 
 // The pin is a small glossy "Aqua glass" badge — the same fill-gradient +
 // specular-highlight + rim recipe as every other button/FAB in the app (see
@@ -50,16 +51,32 @@ export function hasCoords(p: CatchOut): boolean {
 
 // Species that appear among the user's own pins, in first-seen order. Only
 // discovered species ever show up here, so the filter never hints at ones the
-// user hasn't found.
+// user hasn't found. Shape clouds don't get one chip per drawn shape name
+// ("하트구름"/"토끼구름"/…, which have no per-species pin count to fall back
+// on the way the feed's folders do) — they collapse into one shared
+// SHAPE_GROUP_LABEL chip instead, pinned first.
 export function speciesInPins(pins: CatchOut[]): string[] {
-  return [...new Set(pins.map((p) => p.cloud_name))];
+  const names: string[] = [];
+  let hasShape = false;
+  for (const p of pins) {
+    if (isShapeCloud(p.cloud_type)) {
+      hasShape = true;
+      continue;
+    }
+    if (!names.includes(p.cloud_name)) names.push(p.cloud_name);
+  }
+  return hasShape ? [SHAPE_GROUP_LABEL, ...names] : names;
 }
 
 export function filterPinsBySpecies(
   pins: CatchOut[],
   species: string | null,
 ): CatchOut[] {
-  return species ? pins.filter((p) => p.cloud_name === species) : pins;
+  if (!species) return pins;
+  if (species === SHAPE_GROUP_LABEL) {
+    return pins.filter((p) => isShapeCloud(p.cloud_type));
+  }
+  return pins.filter((p) => p.cloud_name === species);
 }
 
 // ---- Clustering + pin markup ------------------------------------------------
