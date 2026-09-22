@@ -15,7 +15,11 @@ type Name =
   | "partly-sunny"
   | "refresh"
   | "chatbubble"
-  | "info";
+  | "info"
+  | "search"
+  | "add"
+  | "add-circle-outline"
+  | "arrow-up";
 
 // Small hand-rolled icon set in the same thin-outline language as the
 // Ionicons the real app uses (@expo/vector-icons) — kept local so this
@@ -99,6 +103,20 @@ const PATHS: Record<Name, JSX.Element> = {
       <path d="M18 4v3.3H14.7M6 20v-3.3h3.3" />
     </g>
   ),
+  search: (
+    <g fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="7" />
+      <path d="M21 21l-4.8-4.8" />
+    </g>
+  ),
+  add: <path d="M12 5v14M5 12h14" fill="none" strokeWidth="2.2" strokeLinecap="round" />,
+  "add-circle-outline": (
+    <g fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8v8M8 12h8" />
+    </g>
+  ),
+  "arrow-up": <path d="M12 19V5M6 11l6-6 6 6" fill="none" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />,
 };
 
 export default function Icon({ name, size = 16, color = "currentColor" }: { name: Name; size?: number; color?: string }) {

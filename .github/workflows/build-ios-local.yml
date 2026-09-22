@@ -9,20 +9,30 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
+    # macos-15's own "latest" Xcode currently lands in the Swift 6.2.x
+    # range, which rejects a SWIFT_RETURNS_RETAINED annotation on
+    # RuntimeScheduler's constructors in expo-modules-jsi (SDK 57) —
+    # "'RuntimeScheduler' cannot be annotated with ... because it is not
+    # returning a SWIFT_SHARED_REFERENCE type". The annotation is harmless
+    # (upstream's own fix just drops it: expo/expo#49740, not yet
+    # released as of SDK 58), but Xcode 26.5+ (Swift 6.3.x) — the default
+    # on macos-26 — compiles the header as written, so moving the runner
+    # here is the fix rather than fighting Swift's version on macos-15.
+    runs-on: macos-26
     defaults:
       run:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
 
-      # macos-15 runners ship several Xcode versions side by side, and the
-      # one xcode-select defaults to isn't necessarily the newest — Apple
-      # rejects App Store Connect uploads built with anything older than
-      # its current minimum Xcode/iOS SDK, which is what was actually
-      # failing at submit time. Pinning to the newest available Xcode here
-      # (rather than a hardcoded version, which will itself go stale) is
-      # what eas build --local invokes under the hood.
+      # This runner image ships several Xcode versions side by side, and
+      # the one xcode-select defaults to isn't necessarily the newest —
+      # Apple rejects App Store Connect uploads built with anything older
+      # than its current minimum Xcode/iOS SDK, which is what was actually
+      # failing at submit time before this step existed. Pinning to the
+      # newest available Xcode here (rather than a hardcoded version,
+      # which will itself go stale) is what eas build --local invokes
+      # under the hood.
       - name: Select latest Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:

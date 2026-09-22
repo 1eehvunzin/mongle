@@ -1,65 +1,142 @@
-import Glass from "../components/Glass";
-import MongleMascot from "../components/MongleMascot";
 import Icon from "../components/Icon";
+import FilterPill from "../components/FilterPill";
 import { glass } from "../theme";
+import recognitionSky from "../assets/photos/recognition-sky.jpg";
 import shareDusk from "../assets/photos/share-dusk.jpg";
 import streakSunset from "../assets/photos/streak-sunset.jpg";
-import recognitionSky from "../assets/photos/recognition-sky.jpg";
+import cumulusPole from "../assets/photos/cumulus-pole.jpg";
 
-const CARDS = [
-  { photo: recognitionSky, cond: "맑음", name: "뭉게구름", temp: 28, place: "성산동", ago: "12분 전" },
-  { photo: shareDusk, cond: "노을", name: "새털구름", temp: 22, place: "여의도 한강공원", ago: "3시간 전" },
-  { photo: streakSunset, cond: "구름조금", name: "양떼구름", temp: 24, place: "남산", ago: "1일 전" },
+// Ported from components/FolderGrid.tsx: each folder is a small pile of its
+// newest photos (one, two, or three), fanned out and tilted like an album
+// stack in Photos, front photo on top. Column/photo sizing below is worked
+// out from the same formula FolderGrid.tsx uses (fit a full 3-photo pile
+// into a 2-column grid), just computed once for this canvas's fixed width
+// instead of at runtime.
+const COLUMN_W = 141;
+const PHOTO_W = 77;
+const PHOTO_H = 103; // PHOTO_RATIO = 4/3
+const STACK_H = 129; // PHOTO_H + 26
+const TILT = 9;
+
+const SLOTS = [
+  { rotate: 0, dx: 0, dy: 0.05 },
+  { rotate: TILT, dx: 0.26, dy: -0.03 },
+  { rotate: -TILT, dx: -0.26, dy: -0.02 },
 ];
+
+type Folder = { key: string; label: string; count: number; photos: (string | null)[] };
+
+// Only 4 real cloud photos exist in the repo's reference assets, so every
+// folder below draws from the same small pool — but each pulls a different
+// three (a different photo fronting the pile each time), so the grid still
+// reads as a full, well-stocked feed rather than the same one or two photos
+// repeated thin. A full three-photo pile is also just the better showcase:
+// see StackCard/FolderTile for how thinner (one- or zero-photo) piles look.
+const FOLDERS: Folder[] = [
+  { key: "뭉게구름", label: "뭉게구름", count: 9, photos: [recognitionSky, shareDusk, streakSunset] },
+  { key: "새털구름", label: "새털구름", count: 6, photos: [shareDusk, streakSunset, cumulusPole] },
+  { key: "양떼구름", label: "양떼구름", count: 5, photos: [recognitionSky, streakSunset, cumulusPole] },
+  { key: "안개구름", label: "안개구름", count: 4, photos: [recognitionSky, shareDusk, cumulusPole] },
+];
+
+function StackCard({ uri, slot }: { uri: string | null; slot: (typeof SLOTS)[number] }) {
+  const left = (COLUMN_W - PHOTO_W) / 2 + slot.dx * PHOTO_W;
+  const top = (STACK_H - PHOTO_H) / 2 + slot.dy * PHOTO_H;
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left,
+        top,
+        width: PHOTO_W,
+        height: PHOTO_H,
+        borderRadius: 13,
+        overflow: "hidden",
+        background: glass.border,
+        boxShadow: "0 3px 8px rgba(0,0,0,0.2)",
+        transform: `rotate(${slot.rotate}deg)`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {uri ? (
+        <img src={uri} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      ) : (
+        <Icon name="cloud" size={28} color={glass.subMuted} />
+      )}
+    </div>
+  );
+}
+
+function FolderTile({ folder }: { folder: Folder }) {
+  const cards = folder.photos.length > 0 ? folder.photos : [null];
+  const painted = cards.map((uri, i) => ({ uri, slot: SLOTS[i] })).reverse();
+  return (
+    <div style={{ width: COLUMN_W, display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <div style={{ position: "relative", width: COLUMN_W, height: STACK_H }}>
+        {painted.map((c, i) => (
+          <StackCard key={i} uri={c.uri} slot={c.slot} />
+        ))}
+      </div>
+      <span style={{ fontSize: 13.5, fontWeight: 700, color: glass.ink, marginTop: 8 }}>{folder.label}</span>
+      <span style={{ fontSize: 11, color: glass.sub, marginTop: 2 }}>{folder.count}장</span>
+    </div>
+  );
+}
 
 export default function FeedScreen() {
   return (
     <div style={{ position: "absolute", inset: 0, background: glass.bg }}>
-      <div style={{ padding: "26px 16px 6px" }}>
-        <span style={{ fontSize: 24, fontWeight: 700, color: glass.ink, letterSpacing: "-0.02em" }}>구름 피드</span>
+      <div
+        style={{
+          padding: "26px 16px 8px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <span style={{ fontSize: 24, fontWeight: 700, color: glass.ink, letterSpacing: "-0.02em" }}>
+          구름 피드
+        </span>
+        <Icon name="search" size={20} color={glass.ink} />
       </div>
-      <div style={{ padding: "6px 0 0" }}>
-        {CARDS.map((c) => (
-          <Glass
-            key={c.name}
-            tone={glass.white}
-            radius={20}
-            style={{ margin: "0 16px 14px", border: `1px solid ${glass.border}` }}
-          >
-            <div style={{ height: 190, position: "relative" }}>
-              <img src={c.photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(20,24,22,0.05), rgba(20,24,22,0.5))" }} />
-              <div style={{ position: "absolute", top: 14, left: 16 }}>
-                <Glass tone={glass.white} radius={999} style={{ paddingLeft: 4, paddingRight: 9, paddingTop: 4, paddingBottom: 4 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <Glass tone={glass.blue} radius={9} style={{ width: 18, height: 18, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <Icon name="cloud" size={11} color={glass.ink} />
-                    </Glass>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: glass.ink }}>
-                      {c.cond} · {c.name} · {c.temp}°
-                    </span>
-                  </div>
-                </Glass>
-              </div>
-              <div style={{ position: "absolute", bottom: 10, right: 14 }}>
-                <MongleMascot size={44} />
-              </div>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 9, padding: 12 }}>
-              <Glass tone={glass.gray} radius={15} style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <MongleMascot size={22} />
-              </Glass>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: glass.ink }}>구름지기</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 3, marginTop: 1 }}>
-                  <Icon name="location" size={10} color={glass.subMuted} />
-                  <span style={{ fontSize: 10.5, color: glass.subMuted }}>
-                    {c.place} · {c.ago}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </Glass>
+
+      {/* The real row is a horizontal ScrollView wider than the screen — a
+          still image can't show that it scrolls, so a right-edge fade
+          stands in for the affordance instead of letting the last chip's
+          count clip mid-digit at the frame edge. */}
+      <div style={{ position: "relative", marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 8, padding: "0 16px", overflow: "hidden" }}>
+          <FilterPill label="종류" active />
+          <FilterPill label="희귀도" active={false} />
+          <FilterPill label="월별" active={false} />
+          <FilterPill label="장소" active={false} />
+          <FilterPill label="전체" active={false} count={24} />
+        </div>
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: 28,
+            background: `linear-gradient(90deg, rgba(242,245,243,0), ${glass.bg})`,
+          }}
+        />
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          padding: "0 10px",
+        }}
+      >
+        {FOLDERS.map((folder) => (
+          <div key={folder.key} style={{ width: "50%", display: "flex", justifyContent: "center", paddingBottom: 20 }}>
+            <FolderTile folder={folder} />
+          </div>
         ))}
       </div>
     </div>
