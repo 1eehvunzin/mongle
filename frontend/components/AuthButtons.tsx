@@ -35,7 +35,11 @@ export default function AuthButtons({
 
   useEffect(() => {
     if (Platform.OS !== "ios") return;
-    AppleAuthentication.isAvailableAsync().then(setAppleAvailable);
+    AppleAuthentication.isAvailableAsync()
+      .then(setAppleAvailable)
+      .catch((error) => {
+        console.warn("Apple authentication availability check failed", error);
+      });
   }, []);
 
   const handleAppleSignIn = async () => {
@@ -68,7 +72,7 @@ export default function AuthButtons({
           style={{ width: "100%", height: rs(46) }}
           onPress={handleAppleSignIn}
         />
-      ) : Platform.OS === "web" ? (
+      ) : Platform.OS === "ios" || Platform.OS === "web" ? (
         <Pressable
           onPress={handleAppleSignIn}
           style={{
@@ -82,7 +86,9 @@ export default function AuthButtons({
           }}
         >
           <Ionicons name="logo-apple" size={rs(18)} color="#FFFFFF" />
-          <Text style={{ fontSize: rs(14), fontWeight: "700", color: "#FFFFFF" }}>
+          <Text
+            style={{ fontSize: rs(14), fontWeight: "700", color: "#FFFFFF" }}
+          >
             Apple로 로그인
           </Text>
         </Pressable>
