@@ -2,7 +2,7 @@
   "expo": {
     "name": "mongle",
     "slug": "mongle",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "scheme": "mongle",
     "orientation": "portrait",
     "icon": "./assets/favicon.png",

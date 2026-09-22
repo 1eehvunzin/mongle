@@ -5,8 +5,10 @@ import type { FolderGroup } from "../lib/feedFilters";
 
 // The feed is folders by default; each chip is a way to group them. "전체" is
 // the one non-folder option: every catch as a plain list, for when you just
-// want to scroll.
-export type FeedGroup = FolderGroup | "all";
+// want to scroll. "모양 구름" isn't a FolderGroup dimension — it's a filter
+// down to shape-cloud catches, still shown as species-style folders (one per
+// shape name) once filtered; see feed.tsx.
+export type FeedGroup = FolderGroup | "all" | "shape";
 
 const GROUPS: { key: FolderGroup; label: string }[] = [
   { key: "species", label: "종류" },
@@ -54,6 +56,11 @@ export default function FeedToolbar({
           onPress={() => onGroup(g.key)}
         />
       ))}
+      <Pill
+        label="모양 구름"
+        active={group === "shape"}
+        onPress={() => onGroup("shape")}
+      />
       <Pill
         label="전체"
         count={total}

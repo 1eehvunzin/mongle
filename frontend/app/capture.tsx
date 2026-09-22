@@ -21,6 +21,7 @@ import { captureConsent } from "../constants/consent";
 import { rs } from "../constants/scale";
 import { getTodaySky, recognize, TodaySkyOut } from "../lib/api";
 import { createCatch } from "../lib/localStore";
+import { drawHandoff } from "../lib/drawHandoff";
 
 type Phase = "camera" | "recognizing" | "result";
 type Recognized = {
@@ -447,6 +448,39 @@ export default function CaptureScreen() {
             />
           </View>
         </View>
+
+        {phase === "result" && photoUri ? (
+          <Pressable
+            onPress={() => {
+              drawHandoff.pending = {
+                photoUri,
+                photoBase64,
+                placeName,
+                lat: coords?.lat ?? null,
+                lng: coords?.lng ?? null,
+                tempC: todaySky?.temp_c ?? null,
+                weatherCondition: todaySky?.condition ?? null,
+              };
+              router.push("/draw");
+            }}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: rs(6),
+              paddingHorizontal: rs(16),
+              paddingTop: rs(12),
+            }}
+          >
+            <Ionicons name="brush-outline" size={rs(14)} color={glass.accent} />
+            <Text
+              className="font-semibold"
+              style={{ fontSize: rs(12.5), color: glass.accent }}
+            >
+              구름에 그려서 모양 구름 만들기
+            </Text>
+          </Pressable>
+        ) : null}
 
         <View style={{ padding: rs(16) }}>
           <Text style={{ fontSize: rs(13), color: glass.sub }}>한 줄 메모</Text>

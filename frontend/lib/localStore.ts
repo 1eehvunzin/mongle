@@ -17,6 +17,7 @@ import {
   starsToStr,
 } from "./cloudSpecies";
 import { computeLevel } from "./levelSystem";
+import { isShapeCloud } from "./shapeClouds";
 import { account } from "./auth";
 import {
   AccountOut,
@@ -121,13 +122,21 @@ async function nextId(): Promise<number> {
 
 async function toOut(c: StoredCatch): Promise<CatchOut> {
   const species = CLOUD_BY_NAME[c.cloudName];
+  // A shape cloud's name is whatever the user drew and chose (e.g.
+  // "하트구름"), never a real KNOWN_CLOUDS entry, so it always misses the
+  // species lookup above — that would silently fall back to 일반/1★ like
+  // any other unrecognized name. Give it a fixed rarity instead: the effort
+  // of drawing one is worth more than the app's default "unknown" tier, and
+  // a fixed value (rather than deriving one from which preset/color) keeps
+  // the self-certified, no-judgment spirit of the feature.
+  const shape = isShapeCloud(c.cloudType);
   return {
     id: c.id,
     dex_no: dexNo(c.cloudName),
     cloud_name: c.cloudName,
     cloud_type: c.cloudType,
-    rarity_label: species?.rarityLabel ?? "일반",
-    stars: starsToStr(species?.stars ?? 1),
+    rarity_label: shape ? "희귀" : (species?.rarityLabel ?? "일반"),
+    stars: shape ? starsToStr(2) : starsToStr(species?.stars ?? 1),
     finish: c.finish,
     memo: c.memo,
     place_name: c.placeName,

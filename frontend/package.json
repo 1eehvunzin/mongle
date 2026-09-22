@@ -1,6 +1,6 @@
 {
   "name": "mongle",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "main": "expo-router/entry",
   "dependencies": {
     "@expo/metro-runtime": "~57.0.16",
@@ -8,6 +8,7 @@
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-seoul/kakao-login": "^6.0.4",
     "@sentry/react-native": "~7.11.0",
+    "@shopify/react-native-skia": "2.6.2",
     "@types/leaflet": "^1.9.22",
     "dotenv": "^16.4.7",
     "expo": "^57.0.0",

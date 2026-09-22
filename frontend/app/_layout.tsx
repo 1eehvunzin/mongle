@@ -113,6 +113,7 @@ function RootLayout() {
         <Stack.Screen name="(onboarding)/splash" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="capture" options={{ presentation: "modal" }} />
+        <Stack.Screen name="draw" options={{ presentation: "modal" }} />
         <Stack.Screen
           name="consent"
           options={{ presentation: "transparentModal", animation: "fade" }}
