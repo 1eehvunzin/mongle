@@ -5,6 +5,7 @@ import { glass, GlassTone } from "../theme";
 import recognitionSky from "../assets/photos/recognition-sky.jpg";
 import shareDusk from "../assets/photos/share-dusk.jpg";
 import streakSunset from "../assets/photos/streak-sunset.jpg";
+import cumulusBird from "../assets/photos/cumulus-bird.jpg";
 
 // Ported from lib/mapMeta.ts / components/MapTopBar.tsx / MapSheet.tsx: a
 // full-bleed map (react-native-maps on device; a decorative texture stands
@@ -38,6 +39,7 @@ const CARDS = [
   { name: "새털구름", place: "여의도 한강공원", photo: shareDusk, rarity: "일반" as const },
   { name: "양떼구름", place: "남산", photo: streakSunset, rarity: "희귀" as const, selected: true },
   { name: "뭉게구름", place: "성산동", photo: recognitionSky, rarity: "일반" as const },
+  { name: "하트구름", place: "여의도 한강공원", photo: cumulusBird, rarity: "희귀" as const },
 ];
 
 function raritySwatch(rarity: "일반" | "희귀" | "전설") {
@@ -109,6 +111,10 @@ export default function MapScreen() {
         <div style={{ position: "relative" }}>
           <div style={{ display: "flex", gap: 8, padding: "0 16px", overflow: "hidden" }}>
             <FilterPill label="전체" active />
+            {/* Shape clouds get one shared chip (however they were each
+                individually named), pinned right after "전체" — ported from
+                lib/mapMeta.ts's speciesInPins/filterPinsBySpecies. */}
+            <FilterPill label="모양 구름" active={false} />
             <FilterPill label="뭉게구름" active={false} />
             <FilterPill label="새털구름" active={false} />
             <FilterPill label="양떼구름" active={false} />
@@ -145,7 +151,7 @@ export default function MapScreen() {
         }}
       >
         <span style={{ display: "block", fontSize: 14, fontWeight: 700, color: glass.ink, padding: "0 16px", marginBottom: 10 }}>
-          구름 기록 <span style={{ color: glass.accent }}>12</span>
+          구름 기록 <span style={{ color: glass.accent }}>13</span>
         </span>
         <div style={{ display: "flex", gap: 10, padding: "0 16px" }}>
           {CARDS.map((c) => (
@@ -160,11 +166,11 @@ export default function MapScreen() {
               }}
             >
               <img src={c.photo} alt="" style={{ width: "100%", height: 62, borderRadius: 10, objectFit: "cover", display: "block" }} />
-              <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: glass.ink, marginTop: 6 }}>{c.name}</span>
+              <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: glass.ink, marginTop: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</span>
               {c.selected ? (
-                <span style={{ fontSize: 11, fontWeight: 700, color: glass.accent }}>기록 보기 ›</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: glass.accent, whiteSpace: "nowrap" }}>기록 보기 ›</span>
               ) : (
-                <span style={{ fontSize: 10, color: glass.subMuted }}>{c.place}</span>
+                <span style={{ display: "block", fontSize: 10, color: glass.subMuted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.place}</span>
               )}
             </div>
           ))}

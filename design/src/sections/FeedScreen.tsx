@@ -5,6 +5,7 @@ import recognitionSky from "../assets/photos/recognition-sky.jpg";
 import shareDusk from "../assets/photos/share-dusk.jpg";
 import streakSunset from "../assets/photos/streak-sunset.jpg";
 import cumulusPole from "../assets/photos/cumulus-pole.jpg";
+import cumulusBird from "../assets/photos/cumulus-bird.jpg";
 
 // Ported from components/FolderGrid.tsx: each folder is a small pile of its
 // newest photos (one, two, or three), fanned out and tilted like an album
@@ -26,16 +27,22 @@ const SLOTS = [
 
 type Folder = { key: string; label: string; count: number; photos: (string | null)[] };
 
-// Only 4 real cloud photos exist in the repo's reference assets, so every
+// 5 real cloud photos exist in the repo's reference assets now, so every
 // folder below draws from the same small pool — but each pulls a different
 // three (a different photo fronting the pile each time), so the grid still
 // reads as a full, well-stocked feed rather than the same one or two photos
 // repeated thin. A full three-photo pile is also just the better showcase:
 // see StackCard/FolderTile for how thinner (one- or zero-photo) piles look.
+//
+// "모양 구름" leads the grid, pinned first regardless of count — ported from
+// feedFilters.ts's groupItems: every shape cloud (however it was individually
+// named — "하트구름", "토끼구름", …) collapses into this one folder in the
+// real 종류 tab, same as here.
 const FOLDERS: Folder[] = [
-  { key: "뭉게구름", label: "뭉게구름", count: 9, photos: [recognitionSky, shareDusk, streakSunset] },
+  { key: "모양 구름", label: "모양 구름", count: 3, photos: [streakSunset, cumulusBird, recognitionSky] },
+  { key: "뭉게구름", label: "뭉게구름", count: 9, photos: [recognitionSky, cumulusBird, streakSunset] },
   { key: "새털구름", label: "새털구름", count: 6, photos: [shareDusk, streakSunset, cumulusPole] },
-  { key: "양떼구름", label: "양떼구름", count: 5, photos: [recognitionSky, streakSunset, cumulusPole] },
+  { key: "양떼구름", label: "양떼구름", count: 5, photos: [cumulusBird, recognitionSky, cumulusPole] },
   { key: "안개구름", label: "안개구름", count: 4, photos: [recognitionSky, shareDusk, cumulusPole] },
 ];
 
@@ -112,7 +119,7 @@ export default function FeedScreen() {
           <FilterPill label="희귀도" active={false} />
           <FilterPill label="월별" active={false} />
           <FilterPill label="장소" active={false} />
-          <FilterPill label="전체" active={false} count={24} />
+          <FilterPill label="전체" active={false} count={27} />
         </div>
         <div
           style={{
